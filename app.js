@@ -510,7 +510,7 @@ function ownerMailView() {
   if (!pending) {
     topRow.append(el("button", { class: "btn-quiet btn-center", text: "Ask for an earlier run", onclick: askSooner }));
   }
-  topRow.append(el("button", { class: "btn-quiet btn-center", text: "✉  Email updates", onclick: ownerNotifySettings }));
+  topRow.append(el("button", { class: "btn-quiet btn-center", text: "✉️  Email updates", onclick: ownerNotifySettings }));
   frag.append(topRow);
 
   const mine = S.items.filter(needsOwner);
@@ -831,7 +831,7 @@ function courierTodoView() {
     el("button", { class: "btn-quiet btn-center", text: "I went today", onclick: logVisit }),
     el("button", { class: "btn-quiet btn-center", text: "Change schedule", onclick: editSchedule })
   ]));
-  frag.append(el("button", { class: "btn-quiet btn-center", text: "✉  Email notifications", onclick: notifySettings }));
+  frag.append(el("button", { class: "btn-quiet btn-center", text: "✉️  Email notifications", onclick: notifySettings }));
 
   const todo = S.items.filter(needsCourier);
   frag.append(el("div", { class: "section-title", text: todo.length ? "To do" : "Nothing to do" }));
@@ -1164,11 +1164,11 @@ function tabsFor() {
     ? [
         { id: "todo", label: "To do", glyph: "✓", badge: S.items.filter(needsCourier).length },
         { id: "add", label: "Add mail", glyph: "＋", badge: S.staged.length },
-        { id: "mailbox", label: "Mailbox", glyph: "✉", badge: 0 },
+        { id: "mailbox", label: "Mailbox", glyph: "✉️", badge: 0 },
         { id: "watch", label: "Watching", glyph: "👁", badge: 0 }
       ]
     : [
-        { id: "mail", label: "Mail", glyph: "✉", badge: S.items.filter(needsOwner).length },
+        { id: "mail", label: "Mail", glyph: "✉️", badge: S.items.filter(needsOwner).length },
         { id: "watch", label: "Watching", glyph: "👁", badge: 0 }
       ];
 }
