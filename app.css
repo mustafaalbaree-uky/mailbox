@@ -109,6 +109,21 @@ body { padding-bottom: calc(64px + var(--safe-bottom)); }
 .shots.one img { width: 100%; max-width: 100%; height: auto; max-height: 340px; object-fit: contain; }
 .shot-group { padding: 8px 14px 0; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 
+/* --------------------------------------------------------------- notes */
+
+.notes { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.note {
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 11px; font-size: 15px;
+}
+.note.mine { background: transparent; }
+.note-who { font-weight: 700; }
+.note-when { color: var(--muted); font-size: 12px; margin-left: 6px; white-space: nowrap; }
+.note-add {
+  padding: 9px 12px; font-size: 14px; text-align: center;
+  color: var(--muted); background: transparent; border-style: dashed;
+}
+
 /* ------------------------------------------------------------- buttons */
 
 .choices { display: grid; gap: 8px; padding: 0 14px 14px; }
@@ -221,6 +236,9 @@ textarea { min-height: 84px; resize: vertical; }
   font-size: 16px; color: var(--muted); padding: 4px 2px;
 }
 .signin .stay input { width: 22px; height: 22px; accent-color: var(--accent); }
+
+.toggle { display: flex; align-items: center; gap: 10px; font-size: 16px; padding: 2px; }
+.toggle input { width: 22px; height: 22px; accent-color: var(--accent); }
 
 .banner {
   background: var(--card); border: 1px solid var(--warn);

@@ -19,9 +19,12 @@ const S = {
   tab: null,
   items: [],
   photos: new Map(),   // item id -> photo rows
+  notes: new Map(),    // item id -> note rows
+  people: new Map(),   // user id -> display name
   watch: [],
   schedule: null,
   requests: [],
+  notify: null,
   staged: []           // photos picked but not yet filed
 };
 
@@ -134,27 +137,40 @@ async function signPaths(paths) {
 /* ------------------------------------------------------------------- data */
 
 async function loadAll() {
-  const [items, watch, schedule, requests] = await Promise.all([
+  const [items, watch, schedule, requests, people, notify] = await Promise.all([
     sb.from("mail_items").select("*").order("created_at", { ascending: false }).limit(200),
     sb.from("watch_items").select("*").order("created_at", { ascending: false }),
     sb.from("schedule").select("*").eq("id", 1).single(),
-    sb.from("visit_requests").select("*").order("created_at", { ascending: false }).limit(10)
+    sb.from("visit_requests").select("*").order("created_at", { ascending: false }).limit(10),
+    sb.from("profiles").select("id, display_name, role"),
+    isCourier() ? sb.from("notify_config").select("*").eq("id", 1).single() : Promise.resolve({ data: null, error: null })
   ]);
-  for (const r of [items, watch, schedule, requests]) if (r.error) throw r.error;
+  for (const r of [items, watch, schedule, requests, people, notify]) if (r.error) throw r.error;
 
   S.items = items.data;
   S.watch = watch.data;
   S.schedule = schedule.data;
   S.requests = requests.data;
+  S.notify = notify.data;
+  S.people = new Map((people.data || []).map((p) => [p.id, p.display_name]));
 
   const ids = S.items.map((i) => i.id);
   S.photos = new Map();
+  S.notes = new Map();
   if (ids.length) {
-    const { data, error } = await sb.from("item_photos").select("*").in("item_id", ids).order("created_at");
-    if (error) throw error;
-    for (const p of data) {
+    const [photos, notes] = await Promise.all([
+      sb.from("item_photos").select("*").in("item_id", ids).order("created_at"),
+      sb.from("item_notes").select("*").in("item_id", ids).order("created_at")
+    ]);
+    if (photos.error) throw photos.error;
+    if (notes.error) throw notes.error;
+    for (const p of photos.data) {
       if (!S.photos.has(p.item_id)) S.photos.set(p.item_id, []);
       S.photos.get(p.item_id).push(p);
+    }
+    for (const n of notes.data) {
+      if (!S.notes.has(n.item_id)) S.notes.set(n.item_id, []);
+      S.notes.get(n.item_id).push(n);
     }
   }
 }
@@ -226,9 +242,52 @@ function itemCard(item, actions) {
   if (item.decision_note) body.append(el("div", { class: "card-note", text: "“" + item.decision_note + "”" }));
   body.append(el("div", { class: "card-meta", text: "Picked up " + shortWhen(item.created_at) }));
   card.append(body);
+  card.append(notesBlock(item));
 
   if (actions) card.append(actions);
   return card;
+}
+
+// A back and forth against one envelope, so "email me that scan" is attached to
+// the thing it is about instead of arriving as a text message with no context.
+function notesBlock(item) {
+  const wrap = el("div", { class: "notes" });
+  for (const n of S.notes.get(item.id) || []) {
+    const line = el("div", { class: "note" + (n.author === S.session.user.id ? " mine" : "") });
+    line.append(el("span", { class: "note-who", text: S.people.get(n.author) || "Someone" }));
+    line.append(document.createTextNode(" " + n.body));
+    line.append(el("span", { class: "note-when", text: shortWhen(n.created_at) }));
+    wrap.append(line);
+  }
+  wrap.append(el("button", {
+    class: "btn-quiet note-add",
+    text: (S.notes.get(item.id) || []).length ? "Add another note" : "Add a note",
+    onclick: () => addNote(item)
+  }));
+  return wrap;
+}
+
+function addNote(item) {
+  sheet(item.label ? `Note on ${item.label}` : "Note on this piece", (panel, close) => {
+    const body = el("textarea", { placeholder: "e.g. please email me that scan" });
+    panel.append(body);
+    panel.append(el("button", {
+      class: "btn-main btn-center",
+      text: "Add the note",
+      onclick: async () => {
+        if (!body.value.trim()) { toast("Write something first", true); return; }
+        close();
+        const ok = await guard("Saving", async () => {
+          const { error } = await sb.from("item_notes").insert({
+            item_id: item.id, author: S.session.user.id, body: body.value.trim()
+          });
+          if (error) throw error;
+          return true;
+        });
+        if (ok) { toast("Note added"); await refresh(); }
+      }
+    }));
+  });
 }
 
 /* ------------------------------------------------------------- lightbox */
@@ -719,6 +778,7 @@ function courierTodoView() {
     el("button", { class: "btn-quiet btn-center", text: "I went today", onclick: logVisit }),
     el("button", { class: "btn-quiet btn-center", text: "Change schedule", onclick: editSchedule })
   ]));
+  frag.append(el("button", { class: "btn-quiet btn-center", text: "✉  Email notifications", onclick: notifySettings }));
 
   const todo = S.items.filter(needsCourier);
   frag.append(el("div", { class: "section-title", text: todo.length ? "To do" : "Nothing to do" }));
@@ -827,6 +887,101 @@ function courierMailboxView() {
     for (const item of done) frag.append(withDelete(item));
   }
   return frag;
+}
+
+// Everything about who gets emailed lives here, on the courier side only. The
+// webhook url and secret are write only: they can be set from here but the
+// database will not hand them back to a browser.
+function notifySettings() {
+  const cfg = S.notify || {};
+  sheet("Email notifications", (panel, close) => {
+    const check = (labelText, on) => {
+      const box = el("input", { type: "checkbox" });
+      box.checked = !!on;
+      const row = el("label", { class: "toggle" }, [box]);
+      row.append(document.createTextNode(" " + labelText));
+      panel.append(row);
+      return box;
+    };
+
+    const mine = el("input", { type: "email", placeholder: "you@example.com", value: cfg.courier_email || "" });
+    panel.append(el("label", { class: "field", text: "Email me at" }));
+    panel.append(mine);
+    const meOn = check("Send me digests", cfg.courier_enabled ?? true);
+    const remind = check("Remind me on mail run day", cfg.run_reminder ?? true);
+
+    const theirs = el("input", { type: "email", placeholder: "ayman@example.com", value: cfg.owner_email || "" });
+    panel.append(el("label", { class: "field", text: "Email Ayman at" }));
+    panel.append(theirs);
+    const themOn = check("Send Ayman digests", cfg.owner_enabled ?? false);
+
+    const delay = el("select");
+    for (const m of [15, 30, 60, 120, 240]) {
+      const label = m < 60 ? `${m} minutes` : m === 60 ? "1 hour" : `${m / 60} hours`;
+      const opt = el("option", { value: String(m), text: label });
+      if ((cfg.digest_minutes ?? 60) === m) opt.selected = true;
+      delay.append(opt);
+    }
+    panel.append(el("label", { class: "field", text: "Wait this long after the first change, then send one email" }));
+    panel.append(delay);
+
+    panel.append(el("label", { class: "field", text: "Apps Script web app URL" }));
+    const url = el("input", { type: "text", placeholder: "https://script.google.com/macros/s/.../exec", autocapitalize: "none", spellcheck: "false" });
+    panel.append(url);
+
+    panel.append(el("label", { class: "field", text: "Shared secret (paste this into the script too)" }));
+    const secret = el("input", { type: "text", placeholder: "leave blank to keep the current one", autocapitalize: "none", spellcheck: "false" });
+    panel.append(secret);
+    panel.append(el("button", {
+      class: "btn-quiet btn-center",
+      text: "Generate a secret",
+      onclick: () => { secret.value = crypto.randomUUID().replace(/-/g, ""); }
+    }));
+
+    panel.append(el("button", {
+      class: "btn-main btn-center",
+      text: "Save",
+      onclick: async () => {
+        close();
+        const ok = await guard("Saving", async () => {
+          const cfgRes = await sb.rpc("set_notify_config", {
+            p_courier_email: mine.value,
+            p_owner_email: theirs.value,
+            p_courier_enabled: meOn.checked,
+            p_owner_enabled: themOn.checked,
+            p_digest_minutes: Number(delay.value),
+            p_run_reminder: remind.checked
+          });
+          if (cfgRes.error) throw cfgRes.error;
+          if (url.value.trim() || secret.value.trim()) {
+            const chRes = await sb.rpc("set_notify_channel", {
+              p_url: url.value.trim() || null,
+              p_secret: secret.value.trim() || null
+            });
+            if (chRes.error) throw chRes.error;
+          }
+          return true;
+        });
+        if (ok) { toast("Saved"); await refresh(); }
+      }
+    }));
+
+    panel.append(el("button", {
+      class: "btn-quiet btn-center",
+      text: "Send me a test email now",
+      onclick: async () => {
+        const to = mine.value.trim();
+        if (!to) { toast("Put your email in first", true); return; }
+        const ok = await guard("Sending", async () => {
+          const { data, error } = await sb.rpc("send_test_email", { p_to: to });
+          if (error) throw error;
+          if (data === false) throw new Error("Save the Apps Script URL first");
+          return true;
+        });
+        if (ok) toast("Test sent, check your inbox");
+      }
+    }));
+  });
 }
 
 async function logVisit() {

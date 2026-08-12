@@ -32,9 +32,33 @@ Mail can be deleted from the courier's Mailbox tab, and watch entries from
 either side. Deleting asks first, is permanent, and takes the image files out of
 the bucket rather than orphaning them.
 
+Every piece of mail also carries a note thread, either direction, so "email me
+that scan please" is attached to the envelope it is about.
+
 Both accounts see a countdown to the next mail run. The courier sets the
 schedule and taps "I went today" to roll it forward. The owner can ask for an
 earlier run, which the courier accepts or declines.
+
+## Email notifications
+
+Nothing sends one email per change. Triggers write every event to
+`notify_events`, and a `pg_cron` job every ten minutes asks: is there anything
+unsent, and is the oldest unsent thing older than the quiet window (an hour by
+default, configurable in the app)? If so, everything since then goes out as a
+single digest. Sixteen decisions become one email.
+
+The courier's digest is ordered by how much work each decision costs, hardest
+first: mail out, scan, photograph, hold, throw away. The owner's digest covers
+new mail, things opened for him, and finished items. Both include any notes.
+There is also a reminder on the morning of a mail run.
+
+Delivery is a Google Apps Script web app that sends from a Gmail account. See
+`tools/apps_script/Code.gs` for the script and its setup steps. Supabase posts
+to it with a shared secret. The webhook url and secret live in `notify_channel`,
+which has no select policy at all, so a signed in browser can set them but can
+never read them back.
+
+Everything is configured in the app under To do > Email notifications.
 
 ## Security shape
 
