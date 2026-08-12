@@ -214,6 +214,11 @@ textarea { min-height: 84px; resize: vertical; }
 .signin { max-width: 380px; margin: 12vh auto; padding: 0 var(--pad); display: flex; flex-direction: column; gap: 14px; }
 .signin h1 { margin: 0; font-size: 30px; letter-spacing: -.02em; }
 .signin p { margin: 0; color: var(--muted); }
+.signin .stay {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 16px; color: var(--muted); padding: 4px 2px;
+}
+.signin .stay input { width: 22px; height: 22px; accent-color: var(--accent); }
 
 .banner {
   background: var(--card); border: 1px solid var(--warn);

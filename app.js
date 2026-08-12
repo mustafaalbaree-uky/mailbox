@@ -396,7 +396,12 @@ function renderTopbar() {
       class: "btn-quiet bar-who",
       style: "border:0;padding:0;background:none",
       text: S.profile.display_name + " · sign out",
-      onclick: async () => { await sb.auth.signOut(); location.reload(); }
+      onclick: async () => {
+        // Without this the saved password would just sign straight back in.
+        forgetLogin();
+        await sb.auth.signOut();
+        location.reload();
+      }
     })
   ]));
 
@@ -849,6 +854,23 @@ const asEmail = (name) => {
   return v.includes("@") ? v : `${v}@${LOGIN_DOMAIN}`;
 };
 
+// Signing in normally sticks on its own: the session is stored and refreshed, so
+// the password is typed once. iOS can still evict that storage after a stretch
+// of not opening the app, which for a weekly errand lands right on the boundary.
+// So the username is always remembered, and "stay signed in" additionally keeps
+// the password on this device and signs in on launch without asking.
+const SAVED_USER = "mailbox.username";
+const SAVED_LOGIN = "mailbox.login";
+
+const readSaved = () => {
+  try { return JSON.parse(localStorage.getItem(SAVED_LOGIN) || "null"); } catch { return null; }
+};
+
+const forgetLogin = () => {
+  localStorage.removeItem(SAVED_LOGIN);
+  localStorage.removeItem(SAVED_USER);
+};
+
 function renderSignIn(message) {
   $boot.hidden = true;
   $app.hidden = true;
@@ -861,26 +883,61 @@ function renderSignIn(message) {
     type: "text", placeholder: "Username", autocomplete: "username",
     autocapitalize: "none", autocorrect: "off", spellcheck: "false", required: true
   });
-  const pass = el("input", { type: "password", placeholder: "Password", autocomplete: "current-password", required: true });
+  const pass = el("input", { type: "password", placeholder: "Password", autocomplete: "current-password", required: true, name: "password" });
+  user.setAttribute("name", "username");
+  user.value = localStorage.getItem(SAVED_USER) || "";
+
+  const stay = el("input", { type: "checkbox" });
+  stay.checked = !!readSaved() || !localStorage.getItem(SAVED_USER);
+  const stayRow = el("label", { class: "stay" }, [stay]);
+  stayRow.append(document.createTextNode(" Stay signed in on this phone"));
+
   form.append(el("h1", { text: "Mailbox" }));
   form.append(el("p", { text: message || "Sign in to see the mail." }));
   form.append(user);
   form.append(pass);
+  form.append(stayRow);
   form.append(el("button", { class: "btn-main btn-center", type: "submit", text: "Sign in" }));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const name = user.value.trim();
     const ok = await guard("Signing in", async () => {
-      const { error } = await sb.auth.signInWithPassword({ email: asEmail(user.value), password: pass.value });
+      const { error } = await sb.auth.signInWithPassword({ email: asEmail(name), password: pass.value });
       if (error) throw new Error(/invalid/i.test(error.message) ? "Wrong username or password" : error.message);
       return true;
     });
-    if (ok) { form.remove(); await start(); }
+    if (ok) {
+      localStorage.setItem(SAVED_USER, name);
+      if (stay.checked) localStorage.setItem(SAVED_LOGIN, JSON.stringify({ u: name, p: pass.value }));
+      else localStorage.removeItem(SAVED_LOGIN);
+      form.remove();
+      await start();
+    }
   });
   document.body.append(form);
+  if (user.value) pass.focus();
 }
 
 async function start() {
-  const { data: { session } } = await sb.auth.getSession();
+  let { data: { session } } = await sb.auth.getSession();
+
+  // Storage got cleared but the phone is a trusted one: sign back in quietly
+  // rather than making him find the password again.
+  if (!session) {
+    const saved = readSaved();
+    if (saved?.u && saved?.p) {
+      busy("Signing in");
+      const { data, error } = await sb.auth.signInWithPassword({ email: asEmail(saved.u), password: saved.p });
+      busy(false);
+      if (error) {
+        forgetLogin();
+        renderSignIn("Your saved password no longer works. Please sign in again.");
+        return;
+      }
+      session = data?.session ?? (await sb.auth.getSession()).data.session;
+    }
+  }
+
   S.session = session;
   if (!session) { renderSignIn(); return; }
 
