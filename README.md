@@ -39,42 +39,38 @@ earlier run, which the courier accepts or declines.
   that last an hour and are minted for a signed in member.
 - The anon key in `config.js` is public by design and grants nothing on its own.
 
-## Setup
+## Where it lives
 
-### 1. Supabase
+- Site: https://mustafaalbaree-uky.github.io/mailbox/
+- Supabase project ref: `otruqvbnxjqmjstmmawf`
+- Deploys on every push to `main` via `.github/workflows/pages.yml`
 
-1. Create a project at supabase.com (free tier is fine).
-2. SQL Editor, paste all of `supabase/schema.sql`, run it.
-3. Authentication > Users > Add user, twice: one for you, one for your uncle.
-   Set passwords yourself and check "auto confirm".
-4. Authentication > Sign In / Providers > Email: turn **off** "Allow new users to
-   sign up". This is what keeps the app to two people.
-5. SQL Editor, open `supabase/create_users.sql`, replace the two email addresses
-   with the real ones, run it. It should print two rows, one courier and one
-   owner.
-6. Project Settings > API: copy the Project URL and the `anon public` key into
-   `config.js`.
+## Already done
 
-### 2. Hosting
+The schema is applied, the private `mail` bucket exists, email signup is turned
+off, and the site URL is set. `supabase/config.toml` and `supabase/migrations`
+hold that state, so it can be rebuilt from scratch.
 
-Any static host works. With GitHub Pages:
+## Setup that is left
+
+1. Authentication > Users > Add user, twice: one for you, one for your uncle.
+   Set the passwords yourself and check "auto confirm". Signup is closed, so this
+   is the only way an account can be made.
+2. Put the two real emails into `supabase/create_users.sql` and run it in the SQL
+   editor. It prints two rows, one courier and one owner.
+3. Open the site in Safari on both phones, Share, Add to Home Screen. Sign in
+   once on each. The session persists, so nobody types a password again.
+
+## Changing the schema later
 
 ```sh
-cd ~/Code/mailbox
-git init && git add -A && git commit -m "Mailbox"
-gh repo create mailbox --private --source=. --push
+supabase migration new some_change   # writes supabase/migrations/<stamp>_some_change.sql
+supabase db push                     # applies it to the live project
+supabase config push                 # applies auth and storage settings
 ```
 
-Then Settings > Pages > Source: GitHub Actions. The included workflow publishes
-on every push to `main`. A private repo needs a paid plan for Pages; if that is
-a problem, make the repo public. The anon key is safe to publish, but do not
-commit anything else.
-
-### 3. On the phone
-
-Open the Pages URL in Safari, Share, Add to Home Screen. Do the same on your
-uncle's phone and sign him in once. The session persists, so he will not have to
-type the password again.
+The CLI lives at `~/.local/bin/supabase` (prebuilt binary, not Homebrew, because
+this Mac's Command Line Tools are too old to build the tap).
 
 ## Local testing
 
