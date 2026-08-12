@@ -184,17 +184,21 @@ textarea { min-height: 84px; resize: vertical; }
 
 .lightbox { position: fixed; inset: 0; z-index: 20; background: #000; }
 
-/* The pan surface. Centring with margin auto rather than align-items, because
-   flex centring clips the top and left of an image larger than its container. */
+/* The pan surface. */
 .zoomer {
   position: absolute; inset: 0;
   display: flex; overflow: hidden;
   -webkit-overflow-scrolling: touch;
 }
-.zoomer img { margin: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
-
+/* margin auto rather than align-items, because flex centring clips the top and
+   left of anything larger than its container. align-self stops the default
+   stretch from interfering with the intrinsic ratio. */
+.zoomer img {
+  margin: auto; align-self: center; display: block;
+  max-width: 100%; max-height: 100%;
+}
+/* Sizes while zoomed are set inline in pixels, measured from the fitted size. */
 .zoomer.zoomed { overflow: auto; }
-.zoomer.zoomed img { margin: auto; max-width: none; max-height: none; width: 260%; height: auto; }
 
 /* Sits above the pan surface and never moves with it. Explicit flex centring
    and zero padding, since the global button padding pushes the glyph off

@@ -296,9 +296,15 @@ function addNote(item) {
 
 /* ------------------------------------------------------------- lightbox */
 
-// Full screen viewer. Tapping the photo zooms in on the spot you tapped and
-// lets you drag around it; tapping again zooms back out. Panning is a plain
-// scroll container, so it gets native momentum and bounce for free.
+// Full screen viewer. It opens fitted to the screen. Tapping the photo zooms to
+// a fixed step centred on the spot you tapped, and you drag to move around;
+// tapping again returns to fitted.
+//
+// The zoomed size is measured in real pixels from the fitted size rather than
+// set as a percentage, because a percentage resolves against the container and
+// produced an enormous, unusable magnification.
+const ZOOM_STEP = 2.5;
+
 async function lightbox(paths, index) {
   const box = document.getElementById("lightbox");
   clear(box);
@@ -306,54 +312,88 @@ async function lightbox(paths, index) {
 
   let i = index;
   let zoomed = false;
+  let dragged = false;
 
   const img = el("img", { alt: "Mail photo" });
   const pane = el("div", { class: "zoomer" }, [img]);
 
-  const setZoom = (on, relX = 0.5, relY = 0.5) => {
-    zoomed = on;
-    pane.classList.toggle("zoomed", on);
-    if (!on) {
-      pane.scrollLeft = 0;
-      pane.scrollTop = 0;
-      return;
-    }
-    // Wait for the new size to be laid out, then put the tapped point in the
-    // middle of the screen.
-    window.requestAnimationFrame(() => {
-      pane.scrollLeft = relX * img.offsetWidth - pane.clientWidth / 2;
-      pane.scrollTop = relY * img.offsetHeight - pane.clientHeight / 2;
-    });
+  const fitted = () => {
+    img.style.width = "";
+    img.style.height = "";
+    img.style.maxWidth = "";
+    img.style.maxHeight = "";
+    pane.classList.remove("zoomed");
+    pane.scrollLeft = 0;
+    pane.scrollTop = 0;
+    zoomed = false;
+  };
+
+  const zoomTo = (relX, relY) => {
+    const rect = img.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;          // not laid out yet
+    const w = Math.round(rect.width * ZOOM_STEP);
+    const h = Math.round(rect.height * ZOOM_STEP);
+
+    img.style.maxWidth = "none";
+    img.style.maxHeight = "none";
+    img.style.width = w + "px";
+    img.style.height = h + "px";
+    pane.classList.add("zoomed");
+    zoomed = true;
+
+    // Put whatever was under the finger in the middle of the screen, clamped
+    // so it cannot land past an edge.
+    pane.scrollLeft = Math.max(0, Math.min(w - pane.clientWidth, relX * w - pane.clientWidth / 2));
+    pane.scrollTop = Math.max(0, Math.min(h - pane.clientHeight, relY * h - pane.clientHeight / 2));
   };
 
   const show = async () => {
-    setZoom(false);
+    fitted();
     const [u] = await signPaths([paths[i]]);
     img.src = u;
   };
 
+  // A pan ends in a click event. Without this, dragging around a zoomed photo
+  // would zoom back out or close the viewer.
+  pane.addEventListener("touchstart", (e) => {
+    dragged = false;
+    pane._sx = e.touches[0].clientX;
+    pane._sy = e.touches[0].clientY;
+  }, { passive: true });
+  pane.addEventListener("touchmove", (e) => {
+    if (Math.abs(e.touches[0].clientX - pane._sx) > 8 ||
+        Math.abs(e.touches[0].clientY - pane._sy) > 8) dragged = true;
+  }, { passive: true });
+
   img.addEventListener("click", (ev) => {
     ev.stopPropagation();
+    if (dragged) return;
+    if (zoomed) { fitted(); return; }
     const rect = img.getBoundingClientRect();
-    setZoom(!zoomed, (ev.clientX - rect.left) / rect.width, (ev.clientY - rect.top) / rect.height);
+    zoomTo((ev.clientX - rect.left) / rect.width, (ev.clientY - rect.top) / rect.height);
   });
 
-  // Tapping the empty space around the photo closes, which is the gesture
-  // people try before hunting for the button.
-  pane.addEventListener("click", () => { box.hidden = true; });
+  // Tapping the empty space around a fitted photo closes. While zoomed there is
+  // no empty space, and a stray tap should not throw away your place.
+  pane.addEventListener("click", () => {
+    if (!dragged && !zoomed) box.hidden = true;
+  });
 
   box.append(pane);
   box.append(el("button", { class: "close", text: "✕", onclick: () => { box.hidden = true; } }));
 
   if (paths.length > 1) {
-    const step = (by) => { i = (i + by + paths.length) % paths.length; show(); count.textContent = `${i + 1} / ${paths.length}`; };
     const count = el("span", { class: "lb-count", text: `${i + 1} / ${paths.length}` });
-    const nav = el("div", { class: "lb-nav" }, [
+    const step = (by) => {
+      i = (i + by + paths.length) % paths.length;
+      count.textContent = `${i + 1} / ${paths.length}`;
+      show();
+    };
+    box.append(el("div", { class: "lb-nav" }, [
       el("button", { text: "‹", onclick: () => step(-1) }),
       count,
       el("button", { text: "›", onclick: () => step(1) })
-    ]);
-    box.append(nav);
+    ]));
   }
 
   show();
