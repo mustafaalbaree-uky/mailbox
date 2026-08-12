@@ -972,13 +972,27 @@ function notifySettings() {
       onclick: async () => {
         const to = mine.value.trim();
         if (!to) { toast("Put your email in first", true); return; }
-        const ok = await guard("Sending", async () => {
+        // The send is asynchronous, so wait for the relay's own answer rather
+        // than claiming success the moment the request is queued. Anything
+        // already in the response log belongs to an earlier attempt.
+        const result = await guard("Sending", async () => {
+          const { data: base } = await sb.rpc("last_email_result", { p_after: 0 });
+          const since = base?.id ?? 0;
+
           const { data, error } = await sb.rpc("send_test_email", { p_to: to });
           if (error) throw error;
           if (data === false) throw new Error("Save the Apps Script URL first");
-          return true;
+
+          for (let tries = 0; tries < 14; tries++) {
+            await new Promise((r) => setTimeout(r, 2500));
+            busy("Waiting for the relay");
+            const { data: probe } = await sb.rpc("last_email_result", { p_after: since });
+            if (probe && probe.result !== "pending") return probe.result;
+          }
+          return "The relay has not answered yet. Check your inbox in a minute.";
         });
-        if (ok) toast("Test sent, check your inbox");
+        if (result === "sent") toast("Test email sent");
+        else if (result) toast(result, true);
       }
     }));
   });
