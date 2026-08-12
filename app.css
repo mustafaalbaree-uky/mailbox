@@ -85,6 +85,8 @@ body { padding-bottom: calc(64px + var(--safe-bottom)); }
 }
 
 .card-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-seq { color: var(--muted); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .card-label { font-size: 19px; font-weight: 650; line-height: 1.25; }
 .card-note { color: var(--muted); font-size: 15px; }
 .card-meta { color: var(--muted); font-size: 13px; }

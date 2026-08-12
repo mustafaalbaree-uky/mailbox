@@ -236,7 +236,11 @@ function itemCard(item, actions) {
   }
 
   const body = el("div", { class: "card-body" });
-  body.append(statusPill(item));
+  const top = el("div", { class: "card-top" });
+  top.append(statusPill(item));
+  // The number is how an emailed digest and this card refer to the same envelope.
+  if (item.seq) top.append(el("span", { class: "card-seq", text: "#" + item.seq }));
+  body.append(top);
   if (item.label) body.append(el("div", { class: "card-label", text: item.label }));
   if (item.courier_note) body.append(el("div", { class: "card-note", text: item.courier_note }));
   if (item.decision_note) body.append(el("div", { class: "card-note", text: "“" + item.decision_note + "”" }));
