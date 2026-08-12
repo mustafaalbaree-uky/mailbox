@@ -30,6 +30,10 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* Several things below set display: flex, which would otherwise beat the
+   browser default for [hidden] and leave the overlays painted over the app. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   background: var(--bg);
