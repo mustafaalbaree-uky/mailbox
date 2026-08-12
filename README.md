@@ -53,11 +53,13 @@ hold that state, so it can be rebuilt from scratch.
 
 ## Setup that is left
 
-1. Authentication > Users > Add user, twice: one for you, one for your uncle.
-   Set the passwords yourself and check "auto confirm". Signup is closed, so this
-   is the only way an account can be made.
-2. Put the two real emails into `supabase/create_users.sql` and run it in the SQL
-   editor. It prints two rows, one courier and one owner.
+1. Authentication > Users > Add user, twice. Supabase asks for an email, so use
+   `mustafa@mailbox.local` and `uncle@mailbox.local`. Set the passwords yourself
+   and check "auto confirm". Signup is closed, so this is the only way an
+   account can be made. Nobody ever types those addresses: the sign in screen
+   asks for a username and the app appends `@mailbox.local` itself.
+2. Run `supabase/create_users.sql` in the SQL editor. It prints two rows, one
+   courier and one owner.
 3. Open the site in Safari on both phones, Share, Add to Home Screen. Sign in
    once on each. The session persists, so nobody types a password again.
 

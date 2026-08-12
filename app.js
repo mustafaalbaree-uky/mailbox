@@ -839,6 +839,16 @@ function render() {
 
 /* ------------------------------------------------------------------ auth */
 
+// Supabase Auth keys on an email address, but nobody here wants to type one.
+// A plain username gets a fixed domain stuck on the back of it. Anything that
+// already looks like an address is passed through untouched, so a real email
+// still works if one is ever needed.
+const LOGIN_DOMAIN = "mailbox.local";
+const asEmail = (name) => {
+  const v = name.trim().toLowerCase();
+  return v.includes("@") ? v : `${v}@${LOGIN_DOMAIN}`;
+};
+
 function renderSignIn(message) {
   $boot.hidden = true;
   $app.hidden = true;
@@ -847,18 +857,21 @@ function renderSignIn(message) {
   let form = document.querySelector(".signin");
   if (form) form.remove();
   form = el("form", { class: "signin" });
-  const email = el("input", { type: "email", placeholder: "Email", autocomplete: "username", required: true });
+  const user = el("input", {
+    type: "text", placeholder: "Username", autocomplete: "username",
+    autocapitalize: "none", autocorrect: "off", spellcheck: "false", required: true
+  });
   const pass = el("input", { type: "password", placeholder: "Password", autocomplete: "current-password", required: true });
   form.append(el("h1", { text: "Mailbox" }));
   form.append(el("p", { text: message || "Sign in to see the mail." }));
-  form.append(email);
+  form.append(user);
   form.append(pass);
   form.append(el("button", { class: "btn-main btn-center", type: "submit", text: "Sign in" }));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const ok = await guard("Signing in", async () => {
-      const { error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pass.value });
-      if (error) throw error;
+      const { error } = await sb.auth.signInWithPassword({ email: asEmail(user.value), password: pass.value });
+      if (error) throw new Error(/invalid/i.test(error.message) ? "Wrong username or password" : error.message);
       return true;
     });
     if (ok) { form.remove(); await start(); }
