@@ -504,14 +504,13 @@ function ownerMailView() {
     ]));
   }
 
-  // Kept above the mail itself: anything below a long column of photos is
-  // effectively hidden.
-  const topRow = el("div", { class: "row" });
   if (!pending) {
-    topRow.append(el("button", { class: "btn-quiet btn-center", text: "Ask for an earlier run", onclick: askSooner }));
+    frag.append(el("button", {
+      class: "btn-quiet btn-center",
+      text: "Ask for an earlier run",
+      onclick: askSooner
+    }));
   }
-  topRow.append(el("button", { class: "btn-quiet btn-center", text: "✉️  Email updates", onclick: ownerNotifySettings }));
-  frag.append(topRow);
 
   const mine = S.items.filter(needsOwner);
   const working = S.items.filter(needsCourier);
@@ -641,6 +640,7 @@ function watchView() {
 
   if (owner) {
     frag.append(el("button", { class: "btn-main btn-center", text: "Add something to watch for", onclick: addWatch }));
+    frag.append(el("button", { class: "btn-quiet btn-center", text: "✉️  Email updates", onclick: ownerNotifySettings }));
   }
 
   const live = S.watch.filter((w) => w.status === "watching");
