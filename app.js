@@ -502,13 +502,16 @@ function ownerMailView() {
       el("strong", { text: "You asked for an earlier run" }),
       el("div", { class: "card-note", text: longDay(pending.requested_date) + ". Waiting on Mustafa to confirm." })
     ]));
-  } else {
-    frag.append(el("button", {
-      class: "btn-quiet btn-center",
-      text: "Ask for an earlier mail run",
-      onclick: askSooner
-    }));
   }
+
+  // Kept above the mail itself: anything below a long column of photos is
+  // effectively hidden.
+  const topRow = el("div", { class: "row" });
+  if (!pending) {
+    topRow.append(el("button", { class: "btn-quiet btn-center", text: "Ask for an earlier run", onclick: askSooner }));
+  }
+  topRow.append(el("button", { class: "btn-quiet btn-center", text: "✉  Email updates", onclick: ownerNotifySettings }));
+  frag.append(topRow);
 
   const mine = S.items.filter(needsOwner);
   const working = S.items.filter(needsCourier);
@@ -534,11 +537,6 @@ function ownerMailView() {
     for (const item of done) frag.append(itemCard(item, null));
   }
 
-  frag.append(el("button", {
-    class: "btn-quiet btn-center",
-    text: "✉  Email updates",
-    onclick: ownerNotifySettings
-  }));
   return frag;
 }
 
