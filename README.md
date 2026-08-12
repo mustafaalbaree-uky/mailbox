@@ -28,6 +28,10 @@ policy pins it to the `watch/` prefix so it still cannot touch mail photos.
 While an item sits with the courier, the owner's card says what he asked for,
 for example "Mustafa is on it · opening it for a scan".
 
+Mail can be deleted from the courier's Mailbox tab, and watch entries from
+either side. Deleting asks first, is permanent, and takes the image files out of
+the bucket rather than orphaning them.
+
 Both accounts see a countdown to the next mail run. The courier sets the
 schedule and taps "I went today" to roll it forward. The owner can ask for an
 earlier run, which the courier accepts or declines.

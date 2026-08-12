@@ -561,6 +561,9 @@ function watchView() {
       el("button", { class: "btn-quiet btn-center", text: "It came in", onclick: () => resolveWatch(w, "found") }),
       el("button", { class: "btn-quiet btn-center", text: "Never mind", onclick: () => resolveWatch(w, "cancelled") })
     ]));
+    card.append(el("div", { class: "choices" }, [
+      el("button", { class: "btn-quiet btn-center", text: "Delete", onclick: () => deleteWatch(w) })
+    ]));
     frag.append(card);
   }
 
@@ -571,6 +574,9 @@ function watchView() {
         el("div", { class: "card-body" }, [
           el("span", { class: "pill", text: w.status === "found" ? "Arrived" : "Called off" }),
           el("div", { class: "card-label", text: w.description })
+        ]),
+        el("div", { class: "choices" }, [
+          el("button", { class: "btn-quiet btn-center", text: "Delete", onclick: () => deleteWatch(w) })
         ])
       ]));
     }
@@ -645,6 +651,42 @@ function addWatch() {
     }));
   });
 }
+
+// Deleting is for clearing out test runs and mistakes. It is permanent, so it
+// always asks first, and it takes the image files with it rather than leaving
+// them orphaned in the bucket.
+function confirmDelete({ title, warning, run }) {
+  sheet(title, (panel, close) => {
+    panel.append(el("p", { class: "card-note", text: warning }));
+    panel.append(el("button", {
+      class: "btn-danger btn-center",
+      text: "Delete for good",
+      onclick: async () => {
+        close();
+        const ok = await guard("Deleting", async () => {
+          const { data, error } = await run();
+          if (error) throw error;
+          const paths = (data || []).filter(Boolean);
+          if (paths.length) await sb.storage.from("mail").remove(paths);
+          return true;
+        });
+        if (ok) { toast("Deleted"); await refresh(); }
+      }
+    }));
+  });
+}
+
+const deleteItem = (item) => confirmDelete({
+  title: item.label ? `Delete "${item.label}"?` : "Delete this piece of mail?",
+  warning: "This removes it and its photos for both of you. It cannot be undone.",
+  run: () => sb.rpc("delete_mail_item", { p_item: item.id })
+});
+
+const deleteWatch = (w) => confirmDelete({
+  title: `Delete "${w.description}"?`,
+  warning: "This removes the entry and its photo for both of you. It cannot be undone.",
+  run: () => sb.rpc("delete_watch_item", { p_watch: w.id })
+});
 
 async function resolveWatch(w, status) {
   const ok = await guard("Saving", async () => {
@@ -767,17 +809,22 @@ function courierMailboxView() {
   const working = S.items.filter(needsCourier);
   const done = S.items.filter((i) => i.status === "done").slice(0, 20);
 
+  // This tab is the only place mail can be deleted, and only from this account.
+  const withDelete = (item) => itemCard(item, el("div", { class: "choices" }, [
+    el("button", { class: "btn-quiet btn-center", text: "Delete", onclick: () => deleteItem(item) })
+  ]));
+
   frag.append(el("div", { class: "section-title", text: "Waiting on Ayman" }));
   if (!waiting.length) frag.append(el("div", { class: "empty", text: "Ayman has looked at everything." }));
-  for (const item of waiting) frag.append(itemCard(item, null));
+  for (const item of waiting) frag.append(withDelete(item));
 
   if (working.length) {
     frag.append(el("div", { class: "section-title", text: "On me" }));
-    for (const item of working) frag.append(itemCard(item, null));
+    for (const item of working) frag.append(withDelete(item));
   }
   if (done.length) {
     frag.append(el("div", { class: "section-title", text: "Finished" }));
-    for (const item of done) frag.append(itemCard(item, null));
+    for (const item of done) frag.append(withDelete(item));
   }
   return frag;
 }
