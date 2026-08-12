@@ -92,13 +92,13 @@ const longDay = (s) => parseDay(s).toLocaleDateString(undefined, { weekday: "lon
 const shortWhen = (ts) => new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 const DECISION = {
-  forward:    { owner: "Send it to me",              courier: "Mail it to him",            glyph: "✈️" },
-  hold:       { owner: "Hold on to it",              courier: "Put it in his box",         glyph: "📦" },
+  forward:    { owner: "Send it to me",              courier: "Mail it to Ayman",            glyph: "✈️" },
+  hold:       { owner: "Hold on to it",              courier: "Put it in Ayman's box",         glyph: "📦" },
   discard:    { owner: "Throw it away",              courier: "Throw it away",             glyph: "🗑️" },
   open_photo: { owner: "Open it, send me a photo",   courier: "Open it and photograph it", glyph: "📷" },
   open_scan:  { owner: "Open it, send me a scan",    courier: "Open it and scan it",       glyph: "🖨️" }
 };
-const DISPOSITION = { forwarded: "Mailed to him", held: "Held here", discarded: "Thrown away" };
+const DISPOSITION = { forwarded: "Mailed out", held: "Held here", discarded: "Thrown away" };
 
 /* ------------------------------------------------------------ signed urls */
 
@@ -177,7 +177,7 @@ function statusPill(item) {
   }
   const label = item.status === "action_needed"
     ? "Mustafa is on it"
-    : "Waiting on him";
+    : "Waiting on Ayman";
   return el("span", { class: "pill wait", text: label });
 }
 
@@ -357,7 +357,7 @@ async function addContents(item) {
     if (error) throw error;
     return true;
   });
-  if (ok) { toast("Sent to him for a look"); await refresh(); }
+  if (ok) { toast("Sent to Ayman for a look"); await refresh(); }
 }
 
 async function fileStaged({ separate, label, note }) {
@@ -380,7 +380,7 @@ async function fileStaged({ separate, label, note }) {
     const count = separate ? S.staged.length : 1;
     S.staged.forEach((s) => URL.revokeObjectURL(s.url));
     S.staged = [];
-    toast(count === 1 ? "Added to his mailbox" : `${count} items added`);
+    toast(count === 1 ? "Added to Ayman's mailbox" : `${count} items added`);
     S.tab = "mailbox";
     await refresh();
   }
@@ -520,7 +520,7 @@ function watchView() {
     frag.append(el("div", {
       class: "empty",
       text: owner ? "Nothing yet. Add anything you are expecting so Mustafa keeps an eye out."
-                  : "He is not waiting on anything in particular."
+                  : "Ayman is not waiting on anything in particular."
     }));
   }
   for (const w of live) {
@@ -554,7 +554,7 @@ function watchView() {
 function addWatch() {
   sheet("Watch for something", (panel, close) => {
     const what = el("input", { type: "text", placeholder: "e.g. new debit card from Chase" });
-    const more = el("textarea", { placeholder: "Anything that helps him spot it (optional)" });
+    const more = el("textarea", { placeholder: "Anything that helps Mustafa spot it (optional)" });
     panel.append(el("label", { class: "field", text: "What are you expecting?" }));
     panel.append(what);
     panel.append(more);
@@ -596,7 +596,7 @@ function courierTodoView() {
   const pending = S.requests.find((r) => r.status === "pending");
   if (pending) {
     const banner = el("div", { class: "banner" }, [
-      el("strong", { text: "He is asking for an earlier run" }),
+      el("strong", { text: "Ayman is asking for an earlier run" }),
       el("div", { class: "card-note", text: longDay(pending.requested_date) + (pending.reason ? " · " + pending.reason : "") })
     ]);
     banner.append(el("div", { class: "row" }, [
@@ -613,7 +613,7 @@ function courierTodoView() {
 
   const todo = S.items.filter(needsCourier);
   frag.append(el("div", { class: "section-title", text: todo.length ? "To do" : "Nothing to do" }));
-  if (!todo.length) frag.append(el("div", { class: "empty", text: "No requests from him right now." }));
+  if (!todo.length) frag.append(el("div", { class: "empty", text: "No requests from Ayman right now." }));
 
   for (const item of todo) {
     const box = el("div", { class: "choices" });
@@ -661,7 +661,7 @@ function courierAddView() {
   frag.append(strip);
 
   const label = el("input", { type: "text", placeholder: "Optional label, e.g. Chase Bank" });
-  const note = el("textarea", { placeholder: "Optional note for him" });
+  const note = el("textarea", { placeholder: "Optional note for Ayman" });
   const many = S.staged.length > 1;
 
   if (many) {
@@ -683,7 +683,7 @@ function courierAddView() {
   } else {
     frag.append(el("button", {
       class: "btn-main btn-center",
-      text: "Send it to his mailbox",
+      text: "Send it to Ayman's mailbox",
       onclick: () => fileStaged({ separate: false, label: label.value.trim(), note: note.value.trim() })
     }));
   }
@@ -700,8 +700,8 @@ function courierMailboxView() {
   const working = S.items.filter(needsCourier);
   const done = S.items.filter((i) => i.status === "done").slice(0, 20);
 
-  frag.append(el("div", { class: "section-title", text: "Waiting on him" }));
-  if (!waiting.length) frag.append(el("div", { class: "empty", text: "He has looked at everything." }));
+  frag.append(el("div", { class: "section-title", text: "Waiting on Ayman" }));
+  if (!waiting.length) frag.append(el("div", { class: "empty", text: "Ayman has looked at everything." }));
   for (const item of waiting) frag.append(itemCard(item, null));
 
   if (working.length) {
@@ -753,7 +753,7 @@ function editSchedule() {
 function respondRequest(req, accept) {
   if (!accept) {
     sheet("Cannot make that date", (panel, close) => {
-      const note = el("textarea", { placeholder: "Let him know why, or when you can (optional)" });
+      const note = el("textarea", { placeholder: "Let Ayman know why, or when you can (optional)" });
       panel.append(note);
       panel.append(el("button", {
         class: "btn-main btn-center",
@@ -767,7 +767,7 @@ function respondRequest(req, accept) {
             if (error) throw error;
             return true;
           });
-          if (ok) { toast("He has been told"); await refresh(); }
+          if (ok) { toast("Ayman has been told"); await refresh(); }
         }
       }));
     });

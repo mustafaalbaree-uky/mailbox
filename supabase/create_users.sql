@@ -12,9 +12,9 @@ where u.email = 'mustafa@mailbox.local'
 on conflict (id) do update set role = excluded.role, display_name = excluded.display_name;
 
 insert into public.profiles (id, role, display_name)
-select u.id, 'owner', 'Uncle'
+select u.id, 'owner', 'Ayman'
 from auth.users u
-where u.email = 'uncle@mailbox.local'
+where u.email = 'ayman@mailbox.local'
 on conflict (id) do update set role = excluded.role, display_name = excluded.display_name;
 
 -- Check: this should print exactly two rows, one courier and one owner. If a
