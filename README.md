@@ -64,7 +64,7 @@ hold that state, so it can be rebuilt from scratch.
 ## Setup that is left
 
 1. Authentication > Users > Add user, twice. Supabase asks for an email, so use
-   `mustafa@mailbox.local` and `uncle@mailbox.local`. Set the passwords yourself
+   `mustafa@mailbox.local` and `ayman@mailbox.local`. Set the passwords yourself
    and check "auto confirm". Signup is closed, so this is the only way an
    account can be made. Nobody ever types those addresses: the sign in screen
    asks for a username and the app appends `@mailbox.local` itself.
