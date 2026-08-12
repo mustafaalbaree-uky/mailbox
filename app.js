@@ -895,31 +895,36 @@ function courierMailboxView() {
 // Sends a test and then genuinely watches for the relay's reply, polling the
 // response log rather than waiting a made up length of time. Runs in the
 // background: the app stays usable and a toast reports the real answer.
-async function watchTestEmail(to) {
+async function watchRelay(fn, args, noChannelMessage) {
   try {
     // Anything already in the log belongs to an earlier attempt.
     const { data: base } = await sb.rpc("last_email_result", { p_after: 0 });
     const since = base?.id ?? 0;
 
-    const { data, error } = await sb.rpc("send_test_email", { p_to: to });
+    const { data, error } = await sb.rpc(fn, args);
     if (error) throw error;
-    if (data === false) throw new Error("Save the Apps Script URL first");
+    if (data === false) throw new Error(noChannelMessage);
 
     for (let tries = 0; tries < 20; tries++) {
       await new Promise((r) => setTimeout(r, 2000));
       const { data: probe } = await sb.rpc("last_email_result", { p_after: since });
       if (probe && probe.result !== "pending") {
-        if (probe.result === "sent") toast("Test email sent");
-        else toast(probe.result, true);
+        toast(probe.result === "sent" ? "Test email sent" : probe.result, probe.result !== "sent");
         return;
       }
     }
     toast("The relay never answered. Check Executions in Apps Script.", true);
   } catch (err) {
     console.error(err);
-    toast(err?.message || "Could not send the test", true);
+    toast(err?.message || "Could not reach the relay", true);
   }
 }
+
+const watchTestEmail = (to) =>
+  watchRelay("send_test_email", { p_to: to }, "Save the Apps Script URL first");
+
+const pingRelay = () =>
+  watchRelay("ping_relay", {}, "Save the Apps Script URL first");
 
 function notifySettings() {
   const cfg = S.notify || {};
@@ -993,6 +998,12 @@ function notifySettings() {
         });
         if (ok) { toast("Saved"); await refresh(); }
       }
+    }));
+
+    panel.append(el("button", {
+      class: "btn-quiet btn-center",
+      text: "Check the connection",
+      onclick: () => { toast("Checking the relay"); pingRelay(); }
     }));
 
     panel.append(el("button", {
