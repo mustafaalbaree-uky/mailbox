@@ -23,15 +23,23 @@
  * below is what stops a stranger with the URL from sending mail through it.
  */
 
+// Bumped whenever this file changes. Every reply carries it, so the app can
+// tell whether the deployment is running current code or a stale version.
+var RELAY_VERSION = 4;
+
 var SHARED_SECRET = 'PASTE_THE_SECRET_HERE';
 
 function doPost(e) {
   try {
     // A script property of the same name wins if one is set, but the constant
     // above is enough on its own.
-    var expected = PropertiesService.getScriptProperties().getProperty('SHARED_SECRET') || SHARED_SECRET;
+    var fromProps = PropertiesService.getScriptProperties().getProperty('SHARED_SECRET');
+    var expected = fromProps || SHARED_SECRET;
     if (!expected || expected === 'PASTE_THE_SECRET_HERE') {
-      return reply(500, 'SHARED_SECRET has not been filled in at the top of Code.gs');
+      return reply(500,
+        'No secret. Script property set: ' + (fromProps ? 'yes' : 'no') +
+        '. Either add a SHARED_SECRET script property, or fill in the constant ' +
+        'and redeploy with Version: New version.');
     }
 
     var payload = JSON.parse(e.postData.contents);
@@ -63,7 +71,7 @@ function doGet() {
 
 function reply(code, message) {
   return ContentService
-    .createTextOutput(JSON.stringify({ status: code, message: message }))
+    .createTextOutput(JSON.stringify({ status: code, message: message, v: RELAY_VERSION }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
