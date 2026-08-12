@@ -892,6 +892,35 @@ function courierMailboxView() {
 // Everything about who gets emailed lives here, on the courier side only. The
 // webhook url and secret are write only: they can be set from here but the
 // database will not hand them back to a browser.
+// Sends a test and then genuinely watches for the relay's reply, polling the
+// response log rather than waiting a made up length of time. Runs in the
+// background: the app stays usable and a toast reports the real answer.
+async function watchTestEmail(to) {
+  try {
+    // Anything already in the log belongs to an earlier attempt.
+    const { data: base } = await sb.rpc("last_email_result", { p_after: 0 });
+    const since = base?.id ?? 0;
+
+    const { data, error } = await sb.rpc("send_test_email", { p_to: to });
+    if (error) throw error;
+    if (data === false) throw new Error("Save the Apps Script URL first");
+
+    for (let tries = 0; tries < 20; tries++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const { data: probe } = await sb.rpc("last_email_result", { p_after: since });
+      if (probe && probe.result !== "pending") {
+        if (probe.result === "sent") toast("Test email sent");
+        else toast(probe.result, true);
+        return;
+      }
+    }
+    toast("The relay never answered. Check Executions in Apps Script.", true);
+  } catch (err) {
+    console.error(err);
+    toast(err?.message || "Could not send the test", true);
+  }
+}
+
 function notifySettings() {
   const cfg = S.notify || {};
   sheet("Email notifications", (panel, close) => {
@@ -972,27 +1001,10 @@ function notifySettings() {
       onclick: async () => {
         const to = mine.value.trim();
         if (!to) { toast("Put your email in first", true); return; }
-        // The send is asynchronous, so wait for the relay's own answer rather
-        // than claiming success the moment the request is queued. Anything
-        // already in the response log belongs to an earlier attempt.
-        const result = await guard("Sending", async () => {
-          const { data: base } = await sb.rpc("last_email_result", { p_after: 0 });
-          const since = base?.id ?? 0;
-
-          const { data, error } = await sb.rpc("send_test_email", { p_to: to });
-          if (error) throw error;
-          if (data === false) throw new Error("Save the Apps Script URL first");
-
-          for (let tries = 0; tries < 14; tries++) {
-            await new Promise((r) => setTimeout(r, 2500));
-            busy("Waiting for the relay");
-            const { data: probe } = await sb.rpc("last_email_result", { p_after: since });
-            if (probe && probe.result !== "pending") return probe.result;
-          }
-          return "The relay has not answered yet. Check your inbox in a minute.";
-        });
-        if (result === "sent") toast("Test email sent");
-        else if (result) toast(result, true);
+        // Fire and watch. Google can take half a minute to answer, which is no
+        // reason to hold the whole app hostage behind a spinner.
+        toast("Testing. I will tell you what the relay says.");
+        watchTestEmail(to);
       }
     }));
   });

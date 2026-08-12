@@ -68,14 +68,26 @@ function reply(code, message) {
 }
 
 /**
- * Run this once from the editor to check Gmail sending works and to trigger the
- * permission prompt before the first real digest arrives. Change the address.
+ * RUN THIS ONCE, from this editor, before the app will work.
+ *
+ * Pick "authorize" in the function dropdown at the top, press Run, and approve
+ * the prompts. Google will warn that the app is unverified: click Advanced,
+ * then "Go to Mailbox relay (unsafe)". It is your own script, which is why
+ * Google has nobody to vouch for it.
+ *
+ * This is what grants the script permission to send mail as you. Without it,
+ * a request from the app reaches the script and then hangs at the sending line,
+ * because Google is waiting for an approval that no one is there to give.
+ *
+ * It emails you, so nothing needs filling in.
  */
-function testSend() {
+function authorize() {
+  var me = Session.getEffectiveUser().getEmail();
   MailApp.sendEmail({
-    to: 'REPLACE_WITH_YOUR_EMAIL',
-    subject: 'Mailbox: relay test',
-    body: 'The relay can send mail.',
+    to: me,
+    subject: 'Mailbox: relay authorized',
+    body: 'The relay can send mail. Nothing else to do here.',
     name: 'Mailbox'
   });
+  Logger.log('Sent a test message to ' + me);
 }
