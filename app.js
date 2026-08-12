@@ -143,7 +143,7 @@ async function loadAll() {
     sb.from("schedule").select("*").eq("id", 1).single(),
     sb.from("visit_requests").select("*").order("created_at", { ascending: false }).limit(10),
     sb.from("profiles").select("id, display_name, role"),
-    isCourier() ? sb.from("notify_config").select("*").eq("id", 1).single() : Promise.resolve({ data: null, error: null })
+    sb.from("notify_config").select("*").eq("id", 1).single()
   ]);
   for (const r of [items, watch, schedule, requests, people, notify]) if (r.error) throw r.error;
 
@@ -533,7 +533,58 @@ function ownerMailView() {
     frag.append(el("div", { class: "section-title", text: "Finished" }));
     for (const item of done) frag.append(itemCard(item, null));
   }
+
+  frag.append(el("button", {
+    class: "btn-quiet btn-center",
+    text: "✉  Email updates",
+    onclick: ownerNotifySettings
+  }));
   return frag;
+}
+
+// Ayman's own switch. It only does anything when Mustafa has turned email on
+// from his side, so the sheet says plainly which state it is in rather than
+// offering a toggle that quietly does nothing.
+function ownerNotifySettings() {
+  const cfg = S.notify || {};
+  const masterOn = !!cfg.owner_enabled;
+
+  sheet("Email updates", (panel, close) => {
+    if (!masterOn) {
+      panel.append(el("p", { class: "card-note", text:
+        "Mustafa has not switched these on yet. Tell him you want them and he can turn them on from his phone." }));
+      return;
+    }
+
+    panel.append(el("p", { class: "card-note", text:
+      "One email when Mustafa adds mail or finishes something, never one per change." }));
+
+    const box = el("input", { type: "checkbox" });
+    box.checked = cfg.owner_opt_in ?? true;
+    const row = el("label", { class: "toggle" }, [box]);
+    row.append(document.createTextNode(" Send me email updates"));
+    panel.append(row);
+
+    const email = el("input", { type: "email", placeholder: "you@example.com", value: cfg.owner_email || "" });
+    panel.append(el("label", { class: "field", text: "Send them to" }));
+    panel.append(email);
+
+    panel.append(el("button", {
+      class: "btn-main btn-center",
+      text: "Save",
+      onclick: async () => {
+        close();
+        const ok = await guard("Saving", async () => {
+          const { error } = await sb.rpc("set_owner_notify", {
+            p_on: box.checked, p_email: email.value
+          });
+          if (error) throw error;
+          return true;
+        });
+        if (ok) { toast(box.checked ? "Emails are on" : "Emails are off"); await refresh(); }
+      }
+    }));
+  });
 }
 
 function ownerChoices(item) {
@@ -952,6 +1003,9 @@ function notifySettings() {
     panel.append(el("label", { class: "field", text: "Email Ayman at" }));
     panel.append(theirs);
     const themOn = check("Send Ayman digests", cfg.owner_enabled ?? false);
+    panel.append(el("p", { class: "card-note", text: cfg.owner_opt_in === false
+      ? "Ayman has turned these off on his side, so nothing will send to him."
+      : "Ayman has these on on his side, so this switch is all that is needed." }));
 
     const delay = el("select");
     for (const m of [15, 30, 60, 120, 240]) {

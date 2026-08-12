@@ -60,6 +60,13 @@ never read them back.
 
 Everything is configured in the app under To do > Email notifications.
 
+The owner's email is behind two switches, and both must be on. The courier owns
+the master switch (`owner_enabled`, off by default), and the owner has his own
+(`owner_opt_in`, on by default) under Mail > Email updates. If the master is
+off, the owner's screen says so instead of offering a toggle that would do
+nothing. The opt in defaults to on so that turning the master on is a single
+action rather than a two person handshake.
+
 ## Security shape
 
 - Two accounts, email and password. Public sign up is turned off, so those two
