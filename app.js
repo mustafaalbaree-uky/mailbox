@@ -296,18 +296,66 @@ function addNote(item) {
 
 /* ------------------------------------------------------------- lightbox */
 
+// Full screen viewer. Tapping the photo zooms in on the spot you tapped and
+// lets you drag around it; tapping again zooms back out. Panning is a plain
+// scroll container, so it gets native momentum and bounce for free.
 async function lightbox(paths, index) {
   const box = document.getElementById("lightbox");
   clear(box);
   box.hidden = false;
+
   let i = index;
+  let zoomed = false;
+
   const img = el("img", { alt: "Mail photo" });
-  const show = async () => { const [u] = await signPaths([paths[i]]); img.src = u; };
-  box.append(img);
+  const pane = el("div", { class: "zoomer" }, [img]);
+
+  const setZoom = (on, relX = 0.5, relY = 0.5) => {
+    zoomed = on;
+    pane.classList.toggle("zoomed", on);
+    if (!on) {
+      pane.scrollLeft = 0;
+      pane.scrollTop = 0;
+      return;
+    }
+    // Wait for the new size to be laid out, then put the tapped point in the
+    // middle of the screen.
+    window.requestAnimationFrame(() => {
+      pane.scrollLeft = relX * img.offsetWidth - pane.clientWidth / 2;
+      pane.scrollTop = relY * img.offsetHeight - pane.clientHeight / 2;
+    });
+  };
+
+  const show = async () => {
+    setZoom(false);
+    const [u] = await signPaths([paths[i]]);
+    img.src = u;
+  };
+
+  img.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const rect = img.getBoundingClientRect();
+    setZoom(!zoomed, (ev.clientX - rect.left) / rect.width, (ev.clientY - rect.top) / rect.height);
+  });
+
+  // Tapping the empty space around the photo closes, which is the gesture
+  // people try before hunting for the button.
+  pane.addEventListener("click", () => { box.hidden = true; });
+
+  box.append(pane);
   box.append(el("button", { class: "close", text: "✕", onclick: () => { box.hidden = true; } }));
+
   if (paths.length > 1) {
-    img.addEventListener("click", () => { i = (i + 1) % paths.length; show(); });
+    const step = (by) => { i = (i + by + paths.length) % paths.length; show(); count.textContent = `${i + 1} / ${paths.length}`; };
+    const count = el("span", { class: "lb-count", text: `${i + 1} / ${paths.length}` });
+    const nav = el("div", { class: "lb-nav" }, [
+      el("button", { text: "‹", onclick: () => step(-1) }),
+      count,
+      el("button", { text: "›", onclick: () => step(1) })
+    ]);
+    box.append(nav);
   }
+
   show();
 }
 
