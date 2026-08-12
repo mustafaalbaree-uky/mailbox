@@ -98,6 +98,8 @@ body { padding-bottom: calc(64px + var(--safe-bottom)); }
 .pill.you  { background: var(--accent); color: var(--accent-ink); }
 .pill.wait { background: transparent; border: 1px solid var(--line); }
 .pill.done { color: var(--ok); border: 1px solid var(--ok); background: transparent; }
+/* Long enough that shouting it in capitals stops being readable. */
+.pill.long { text-transform: none; font-size: 13px; font-weight: 600; letter-spacing: 0; }
 
 .shots { display: flex; gap: 6px; padding: 6px; overflow-x: auto; background: var(--line); }
 .shots img {

@@ -100,6 +100,16 @@ const DECISION = {
 };
 const DISPOSITION = { forwarded: "Mailed out", held: "Held here", discarded: "Thrown away" };
 
+// What the owner sees on an item he has already ruled on, so the pill says both
+// that Mustafa has it and which of the five things he was asked to do.
+const IN_PROGRESS = {
+  forward:    "sending it to you",
+  hold:       "holding on to it",
+  discard:    "throwing it away",
+  open_photo: "opening it for a photo",
+  open_scan:  "opening it for a scan"
+};
+
 /* ------------------------------------------------------------ signed urls */
 
 const urlCache = new Map();
@@ -175,10 +185,14 @@ function statusPill(item) {
       : item.status === "awaiting_review" ? "Opened, your call" : "Needs your call";
     return el("span", { class: "pill you", text: label });
   }
-  const label = item.status === "action_needed"
-    ? "Mustafa is on it"
-    : "Waiting on Ayman";
-  return el("span", { class: "pill wait", text: label });
+  if (item.status === "action_needed") {
+    const doing = IN_PROGRESS[item.decision];
+    return el("span", {
+      class: doing ? "pill wait long" : "pill wait",
+      text: doing ? `Mustafa is on it · ${doing}` : "Mustafa is on it"
+    });
+  }
+  return el("span", { class: "pill wait", text: "Waiting on Ayman" });
 }
 
 function photoStrip(item, kind) {
@@ -287,8 +301,8 @@ function compress(file, max = 1800, quality = 0.82) {
   });
 }
 
-async function uploadBlobs(blobs, onProgress) {
-  const stamp = isoDay(new Date()).slice(0, 7);
+async function uploadBlobs(blobs, onProgress, prefix) {
+  const stamp = prefix || isoDay(new Date()).slice(0, 7);
   const paths = [];
   for (const [n, blob] of blobs.entries()) {
     if (onProgress) onProgress(n + 1, blobs.length);
@@ -530,6 +544,14 @@ function watchView() {
   }
   for (const w of live) {
     const card = el("div", { class: "card" });
+    if (w.photo_path) {
+      const strip = el("div", { class: "shots one" });
+      const img = el("img", { alt: "What to look for", loading: "lazy" });
+      img.addEventListener("click", () => lightbox([w.photo_path], 0));
+      strip.append(img);
+      signPaths([w.photo_path]).then(([url]) => { if (url) img.src = url; });
+      card.append(strip);
+    }
     const body = el("div", { class: "card-body" });
     body.append(el("div", { class: "card-label", text: w.description }));
     if (w.details) body.append(el("div", { class: "card-note", text: w.details }));
@@ -563,6 +585,36 @@ function addWatch() {
     panel.append(el("label", { class: "field", text: "What are you expecting?" }));
     panel.append(what);
     panel.append(more);
+
+    // A picture of the thing, if he has one, so Mustafa knows it on sight.
+    let shot = null;
+    const preview = el("div", { class: "staged" });
+    const addPhoto = el("button", { class: "btn-quiet btn-center", text: "📷  Add a photo of it" });
+    const drawPreview = () => {
+      clear(preview);
+      addPhoto.textContent = shot ? "📷  Use a different photo" : "📷  Add a photo of it";
+      if (!shot) return;
+      preview.append(el("figure", {}, [
+        el("img", { src: shot.url, alt: "What to look for" }),
+        el("button", {
+          text: "✕",
+          onclick: () => { URL.revokeObjectURL(shot.url); shot = null; drawPreview(); }
+        })
+      ]));
+    };
+    addPhoto.addEventListener("click", async () => {
+      const files = await pickFiles({ camera: false });
+      if (!files.length) return;
+      await guard("Preparing photo", async () => {
+        if (shot) URL.revokeObjectURL(shot.url);
+        const blob = await compress(files[0]);
+        shot = { blob, url: URL.createObjectURL(blob) };
+      });
+      drawPreview();
+    });
+    panel.append(addPhoto);
+    panel.append(preview);
+
     panel.append(el("button", {
       class: "btn-main btn-center",
       text: "Add it",
@@ -570,15 +622,25 @@ function addWatch() {
         if (!what.value.trim()) { toast("Give it a short name first", true); return; }
         close();
         const ok = await guard("Saving", async () => {
+          let path = null;
+          if (shot) {
+            busy("Uploading the photo");
+            [path] = await uploadBlobs([shot.blob], null, "watch");
+          }
           const { error } = await sb.from("watch_items").insert({
             description: what.value.trim(),
             details: more.value.trim() || null,
+            photo_path: path,
             created_by: S.session.user.id
           });
           if (error) throw error;
           return true;
         });
-        if (ok) { toast("Added"); await refresh(); }
+        if (ok) {
+          if (shot) URL.revokeObjectURL(shot.url);
+          toast("Added");
+          await refresh();
+        }
       }
     }));
   });

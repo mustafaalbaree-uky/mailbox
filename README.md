@@ -20,7 +20,13 @@ owner picks a final action    ->  action_needed       ->  done
 ```
 
 The owner can also change their mind while the item is still on the courier, and
-can list things they are expecting so the courier watches for them.
+can list things they are expecting so the courier watches for them. A watch entry
+can carry a photo of the thing, since he often has a picture of it before it
+arrives. That is the one place the owner account may write to storage, and the
+policy pins it to the `watch/` prefix so it still cannot touch mail photos.
+
+While an item sits with the courier, the owner's card says what he asked for,
+for example "Mustafa is on it · opening it for a scan".
 
 Both accounts see a countdown to the next mail run. The courier sets the
 schedule and taps "I went today" to roll it forward. The owner can ask for an
