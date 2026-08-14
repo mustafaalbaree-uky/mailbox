@@ -67,6 +67,26 @@ off, the owner's screen says so instead of offering a toggle that would do
 nothing. The opt in defaults to on so that turning the master on is a single
 action rather than a two person handshake.
 
+## Home screen widget
+
+`tools/scriptable/mailbox-widget.js` is a [Scriptable](https://scriptable.app)
+widget: a glance at what is waiting on you without opening anything. The header
+counts down to the next mail run, and the list is whatever is in your court —
+for the courier the mail he has been told to go do something about, for the
+owner the mail waiting on his call.
+
+It signs in with the same username and password as the app and asks the
+database which role that login is, so the same script does both sides. The
+password is read from the script once and then kept in the iOS keychain, and the
+access token is refreshed rather than re-signed-in on every wake. The last good
+fetch is cached, so a widget on a phone with no signal shows this morning's list
+marked "offline" instead of going blank.
+
+Copy it into Scriptable (or drop it in the Scriptable iCloud folder as
+`Mailbox.js`), fill in `USERNAME` and `PASSWORD` at the top, run it once, then
+add it to the home screen. Small shows the count alone, medium four rows, large
+nine.
+
 ## Security shape
 
 - Two accounts, email and password. Public sign up is turned off, so those two
@@ -137,3 +157,4 @@ do not open `index.html` as a file.
 | `supabase/schema.sql` | tables, row level security, and the rpc functions |
 | `supabase/create_users.sql` | links the two logins to their roles |
 | `tools/make_icons.mjs` | regenerates the app icons |
+| `tools/scriptable/mailbox-widget.js` | the iPhone home screen widget |
