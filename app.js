@@ -256,8 +256,40 @@ function statusPill(item) {
   return el("span", { class: "pill wait", text: "Waiting on Ayman" });
 }
 
+// A scan can arrive as a pdf, which has no thumbnail to show and belongs in a
+// reader rather than a lightbox. Open puts it on screen; Save keeps it, because
+// a signed url dies within the hour and a bill is worth filing.
+function docStrip(item, kind) {
+  const docs = (S.photos.get(item.id) || []).filter((p) => p.kind === kind && isPdf(p.path));
+  if (!docs.length) return null;
+
+  const wrap = el("div", { class: "docs" });
+  docs.forEach((d, n) => {
+    const name = docs.length > 1 ? `Scan ${n + 1}` : "Scan";
+    const row = el("div", { class: "doc" }, [
+      el("span", { class: "doc-icon", text: "📄" }),
+      el("span", { class: "doc-name", text: name + ".pdf" })
+    ]);
+
+    const open = el("a", { class: "doc-btn", text: "Open", target: "_blank", rel: "noopener" });
+    const save = el("a", { class: "doc-btn", text: "Save", target: "_blank", rel: "noopener" });
+    row.append(open);
+    row.append(save);
+
+    signPaths([d.path]).then(([url]) => {
+      if (!url) return;
+      open.href = url;
+      // Supabase honours this on a signed url and sends it down as a file.
+      save.href = url + (url.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(name + ".pdf");
+    });
+
+    wrap.append(row);
+  });
+  return wrap;
+}
+
 function photoStrip(item, kind) {
-  const shots = (S.photos.get(item.id) || []).filter((p) => p.kind === kind);
+  const shots = (S.photos.get(item.id) || []).filter((p) => p.kind === kind && !isPdf(p.path));
   if (!shots.length) return null;
   const strip = el("div", { class: "shots" + (shots.length === 1 ? " one" : "") });
   shots.forEach((p) => {
@@ -280,9 +312,11 @@ function itemCard(item, actions) {
   if (envelopes) card.append(envelopes);
 
   const contents = photoStrip(item, "contents");
-  if (contents) {
+  const docs = docStrip(item, "contents");
+  if (contents || docs) {
     card.append(el("div", { class: "shot-group", text: "Inside" }));
-    card.append(contents);
+    if (contents) card.append(contents);
+    if (docs) card.append(docs);
   }
 
   const body = el("div", { class: "card-body" });
@@ -468,9 +502,13 @@ function sheet(title, build) {
 
 /* --------------------------------------------------------------- photos */
 
-function pickFiles({ camera }) {
+function pickFiles({ camera, pdf }) {
   return new Promise((resolve) => {
-    const input = el("input", { type: "file", accept: "image/*", multiple: !camera });
+    const input = el("input", {
+      type: "file",
+      accept: pdf ? "image/*,application/pdf" : "image/*",
+      multiple: !camera
+    });
     if (camera) input.setAttribute("capture", "environment");
     input.style.display = "none";
     input.addEventListener("change", () => {
@@ -482,9 +520,17 @@ function pickFiles({ camera }) {
   });
 }
 
+const isPdf = (fileOrPath) =>
+  typeof fileOrPath === "string"
+    ? fileOrPath.toLowerCase().endsWith(".pdf")
+    : fileOrPath?.type === "application/pdf";
+
 // Phone photos are 3 to 5 MB each. Resize to something that still reads a
-// return address but uploads in a second or two on cell service.
+// return address but uploads in a second or two on cell service. A pdf out of
+// the scanner app is already small and there is nothing to resize, so it goes
+// up exactly as it came.
 function compress(file, max = 1800, quality = 0.82) {
+  if (isPdf(file)) return Promise.resolve(file);
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -507,8 +553,10 @@ async function uploadBlobs(blobs, onProgress, prefix) {
   const paths = [];
   for (const [n, blob] of blobs.entries()) {
     if (onProgress) onProgress(n + 1, blobs.length);
-    const path = `${stamp}/${crypto.randomUUID()}.jpg`;
-    const { error } = await sb.storage.from("mail").upload(path, blob, { contentType: "image/jpeg" });
+    const pdf = isPdf(blob);
+    const path = `${stamp}/${crypto.randomUUID()}${pdf ? ".pdf" : ".jpg"}`;
+    const { error } = await sb.storage.from("mail")
+      .upload(path, blob, { contentType: pdf ? "application/pdf" : "image/jpeg" });
     if (error) throw error;
     paths.push(path);
   }
@@ -570,10 +618,10 @@ function startOpening(item) {
 }
 
 async function addShots(item) {
-  // A scan comes out of the scanner app and lands in the photo library; a photo
-  // is taken here and now.
+  // A scan comes out of the scanner app, as an image or a pdf, and lands in the
+  // files or the photo library; a photo is taken here and now.
   const camera = item.decision === "open_photo";
-  const files = await pickFiles({ camera });
+  const files = await pickFiles({ camera, pdf: !camera });
 
   if (!files.length) {
     if (!S.opening?.shots.length) S.opening = null;
@@ -584,7 +632,7 @@ async function addShots(item) {
   await guard("Preparing photos", async () => {
     for (const f of files) {
       const blob = await compress(f, 2200, 0.86);
-      S.opening.shots.push({ blob, url: URL.createObjectURL(blob) });
+      S.opening.shots.push({ blob, url: URL.createObjectURL(blob), pdf: isPdf(blob), name: f.name });
     }
   });
   render();
@@ -610,9 +658,70 @@ async function sendOpening(item) {
   if (ok) {
     shots.forEach((s) => URL.revokeObjectURL(s.url));
     S.opening = null;
-    toast(shots.length === 1 ? "Sent to Ayman for a look" : `${shots.length} photos sent to Ayman`);
+    toast(shots.length === 1 ? "Sent to Ayman for a look" : `${shots.length} files sent to Ayman`);
     await refresh();
   }
+}
+
+// He asked for it opened, it turned out to be an advert. Photographing junk to
+// get rid of it wastes both their time, so it can be thrown away from here, and
+// the reason goes across as a note so the finished card says why.
+function tossJunk(item) {
+  sheet("Throw it away without sending it?", (panel, close) => {
+    panel.append(el("div", {
+      class: "card-note",
+      text: "He asked to see inside this one. Ayman will be told it was thrown away."
+    }));
+    const why = el("input", { type: "text", placeholder: "What was it? e.g. an advert" });
+    panel.append(why);
+    panel.append(el("button", {
+      class: "btn-danger btn-center",
+      text: "Throw it away",
+      onclick: async () => {
+        close();
+        const reason = why.value.trim();
+        const ok = await guard("Saving", async () => {
+          if (reason) {
+            const { error } = await sb.from("item_notes").insert({
+              item_id: item.id, author: S.session.user.id, body: reason
+            });
+            if (error) throw error;
+          }
+          const { error } = await sb.rpc("complete_item", { p_item: item.id, p_disposition: "discarded" });
+          if (error) throw error;
+          return true;
+        });
+        if (ok) { S.opening = null; toast("Thrown away"); await refresh(); }
+      }
+    }));
+  });
+}
+
+// Sending the contents was a one way door until now: a blurry page or the wrong
+// letter sat with Ayman with no way back. This pulls it out of his hands, takes
+// the photos out of the bucket, and puts the item back on the To do list.
+async function undoOpened(item) {
+  sheet("Take it back?", (panel, close) => {
+    panel.append(el("div", {
+      class: "card-note",
+      text: "The photos come off this piece and it goes back on your To do list to redo."
+    }));
+    panel.append(el("button", {
+      class: "btn-main btn-center",
+      text: "Take it back",
+      onclick: async () => {
+        close();
+        const ok = await guard("Undoing", async () => {
+          const { data: paths, error } = await sb.rpc("undo_opened", { p_item: item.id });
+          if (error) throw error;
+          if (paths?.length) await sb.storage.from("mail").remove(paths);
+          paths?.forEach((p) => urlCache.delete(p));
+          return true;
+        });
+        if (ok) { toast("Back on your list"); await refresh(); }
+      }
+    }));
+  });
 }
 
 async function fileStaged({ separate, label, note }) {
@@ -1061,12 +1170,24 @@ function courierTodoView() {
           text: scan ? "Attach the scan" : "Photograph the contents",
           onclick: () => startOpening(item)
         }));
+        box.append(el("button", {
+          class: "btn-quiet btn-center",
+          text: "🗑️  Junk · throw it away",
+          onclick: () => tossJunk(item)
+        }));
       } else {
         if (S.opening.shots.length) {
           const strip = el("div", { class: "staged" });
           S.opening.shots.forEach((shot, n) => {
+            // A pdf has no thumbnail to show, so it gets a tile with its name.
+            const face = shot.pdf
+              ? el("div", { class: "doc-tile" }, [
+                  el("span", { class: "doc-icon", text: "📄" }),
+                  el("span", { class: "doc-name", text: shot.name || "Scan.pdf" })
+                ])
+              : el("img", { src: shot.url, alt: "Photo of the contents" });
             strip.append(el("figure", {}, [
-              el("img", { src: shot.url, alt: "Photo of the contents" }),
+              face,
               el("button", {
                 text: "✕",
                 onclick: () => { URL.revokeObjectURL(shot.url); S.opening.shots.splice(n, 1); render(); }
@@ -1174,9 +1295,18 @@ function courierMailboxView() {
   const done = S.items.filter((i) => i.status === "done").slice(0, 20);
 
   // This tab is the only place mail can be deleted, and only from this account.
-  const withDelete = (item) => itemCard(item, el("div", { class: "choices" }, [
-    el("button", { class: "btn-quiet btn-center", text: "Delete", onclick: () => deleteItem(item) })
-  ]));
+  // It is also where a send gets taken back, since that is where the item lands
+  // the moment it goes over to him.
+  const withDelete = (item) => {
+    const box = el("div", { class: "choices" });
+    if (item.status === "awaiting_review") {
+      box.append(el("button", {
+        class: "btn-quiet btn-center", text: "↩︎  Take it back", onclick: () => undoOpened(item)
+      }));
+    }
+    box.append(el("button", { class: "btn-quiet btn-center", text: "Delete", onclick: () => deleteItem(item) }));
+    return itemCard(item, box);
+  };
 
   frag.append(el("div", { class: "section-title", text: "Waiting on Ayman" }));
   if (!waiting.length) frag.append(el("div", { class: "empty", text: "Ayman has looked at everything." }));

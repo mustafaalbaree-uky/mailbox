@@ -28,7 +28,7 @@ const door = (anchor, line) => {
   app = app.replace(anchor, anchor + "\n  " + line);
 };
 
-door("function pickFiles({ camera }) {", "if (window.__pick) return Promise.resolve(window.__pick(camera));");
+door("function pickFiles({ camera, pdf }) {", "if (window.__pick) return Promise.resolve(window.__pick({ camera, pdf }));");
 door("function compress(file, max = 1800, quality = 0.82) {", "if (window.__pick) return Promise.resolve(file);");
 
 fs.writeFileSync(path.join(out, "app.js"), app);

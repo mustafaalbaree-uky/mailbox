@@ -113,6 +113,30 @@ body { padding-bottom: calc(64px + var(--safe-bottom)); }
 
 /* --------------------------------------------------------------- notes */
 
+/* A scan that came over as a pdf: nothing to show, so say what it is and give
+   the two things you would want to do with it. */
+.docs { display: flex; flex-direction: column; gap: 6px; padding: 8px 14px 0; }
+
+.doc {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
+}
+.doc-icon { font-size: 20px; }
+.doc-name { flex: 1; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.doc-btn {
+  flex: none; padding: 7px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: transparent;
+  font-size: 14px; font-weight: 600; text-decoration: none; color: inherit;
+}
+
+.doc-tile {
+  width: 92px; height: 92px; border-radius: 10px; border: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 6px; text-align: center;
+}
+.doc-tile .doc-name { flex: none; font-size: 11px; width: 100%; }
+
 .notes { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
 .note {
   background: var(--bg); border: 1px solid var(--line);

@@ -29,7 +29,7 @@ globalThis.scrollTo = () => {};
 
 
 // The picker and the compressor are the two places a real camera would be.
-window.__pick = () => [{ name: "shot.jpg" }];
+window.__pick = ({ pdf }) => [pdf && window.__wantPdf ? { name: "Statement.pdf", type: "application/pdf" } : { name: "shot.jpg", type: "image/jpeg" }];
 window.__rpc = [];
 const app = await import(new URL("app.js", dir));
 
@@ -45,6 +45,11 @@ const cards = () => [...view().querySelectorAll(".card")].map((c) => {
   const pill = c.querySelector(".pill")?.textContent || "";
   return `${seq} ${pill}`.trim();
 });
+const tapStarts = (prefix) => {
+  const b = [...view().querySelectorAll("button")].find((x) => x.textContent.trim().startsWith(prefix));
+  if (!b) throw new Error(`no button starting "${prefix}" among: ${buttons().join(" | ")}`);
+  b.click();
+};
 const tap = (text) => {
   const b = [...view().querySelectorAll("button")].find((x) => x.textContent.trim() === text);
   if (!b) throw new Error(`no button "${text}" among: ${buttons().join(" | ")}`);
@@ -61,18 +66,18 @@ console.log("chips:", chips().join("   "));
 console.log("cards:", cards().join(", "));
 
 console.log("\n-- after tapping the Hold chip");
-tap("📦 Hold2");
+tapStarts("📦 Hold");
 await settle();
 console.log("chips:", chips().join("   "));
 console.log("cards:", cards().join(", "));
 
 console.log("\n-- back to All");
-tap("All7");
+tapStarts("All");
 await settle();
 console.log("cards:", cards().join(", "));
 
 console.log("\n-- opening #10, staging three photos");
-tap("📷 Photograph1");
+tapStarts("📷 Photograph");
 await settle();
 tap("Photograph the contents");
 await settle();
@@ -106,4 +111,46 @@ window.document.dispatchEvent(new window.Event("visibilitychange"));
 await settle(); await settle();
 console.log("redrew:", view().querySelector(".card") !== before);
 console.log("cards:", cards().join(", "));
+console.log("\n-- a scan attached as a pdf");
+window.__rpc.length = 0;
+window.__wantPdf = true;
+tapStarts("🖨️ Scan");
+await settle();
+tap("Attach the scan");
+await settle();
+console.log("staged tile:", view().querySelector(".doc-tile")?.textContent.trim(), "| thumbnails:", view().querySelectorAll(".staged img").length);
+console.log("buttons:", buttons().filter((b) => /Send|another|Choose/.test(b)).join(" | "));
+tap("Send it to Ayman");
+await settle(); await settle();
+console.log("rpc:", window.__rpc.join(" ; "));
+window.__wantPdf = false;
+
+console.log("\n-- the junk escape on an item he asked to be opened");
+tapStarts("All");
+await settle();
+const openCard = [...view().querySelectorAll(".card")].find((c) => c.textContent.includes("Open it and photograph it"));
+console.log("buttons on it:", [...openCard.querySelectorAll("button")].map((b) => b.textContent.trim()).join(" | "));
+[...openCard.querySelectorAll("button")].find((b) => b.textContent.includes("Junk")).click();
+await settle();
+const sheetEl = window.document.getElementById("sheet");
+console.log("sheet:", sheetEl.querySelector("h2").textContent);
+sheetEl.querySelector("input").value = "an advert";
+[...sheetEl.querySelectorAll("button")].find((b) => b.textContent.trim() === "Throw it away").click();
+await settle(); await settle();
+console.log("rpc:", window.__rpc.slice(-1)[0]);
+
+console.log("\n-- a pdf scan on the Mailbox tab, and taking a send back");
+window.__rpc.length = 0;
+[...window.document.getElementById("tabs").querySelectorAll("button")].find((t) => t.textContent.includes("Mailbox")).click();
+await settle(); await settle();
+const pdfCard = [...view().querySelectorAll(".card")].find((c) => c.querySelector(".docs"));
+console.log("doc row:", pdfCard.querySelector(".doc-name").textContent,
+  "| links:", [...pdfCard.querySelectorAll(".doc-btn")].map((a) => a.textContent + "=" + (a.href || "").slice(0, 60)).join(" , "));
+console.log("images rendered for the pdf:", pdfCard.querySelectorAll(".docs img").length);
+[...pdfCard.querySelectorAll("button")].find((b) => b.textContent.includes("Take it back")).click();
+await settle();
+[...window.document.getElementById("sheet").querySelectorAll("button")].find((b) => b.textContent.trim() === "Take it back").click();
+await settle(); await settle();
+console.log("rpc:", window.__rpc.join(" ; "));
+
 process.exit(0);

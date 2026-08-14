@@ -27,13 +27,17 @@ export const DB = {
     item(8, "coupons", "discard"),
     item(7, "Verizon", "hold"),
     item(6, "Costco", "discard"),
-    { ...item(3, "Water bill", null), status: "awaiting_decision", decision: null }
+    { ...item(3, "Water bill", null), status: "awaiting_decision", decision: null },
+    // Already sent over: a scan that went as a pdf, waiting on his review.
+    { ...item(5, "Blue Cross", null), status: "awaiting_review", decision: null }
   ],
   item_photos: [
     { id: "p1", item_id: "i-12", path: "a.jpg", kind: "envelope", created_at: iso(2), created_by: ME },
     { id: "p2", item_id: "i-11", path: "b.jpg", kind: "envelope", created_at: iso(2), created_by: ME },
     { id: "p3", item_id: "i-10", path: "c.jpg", kind: "envelope", created_at: iso(2), created_by: ME },
-    { id: "p4", item_id: "i-9", path: "d.jpg", kind: "envelope", created_at: iso(2), created_by: ME }
+    { id: "p4", item_id: "i-9", path: "d.jpg", kind: "envelope", created_at: iso(2), created_by: ME },
+    { id: "p5", item_id: "i-5", path: "e.jpg", kind: "envelope", created_at: iso(3), created_by: ME },
+    { id: "p6", item_id: "i-5", path: "2026-08/scan.pdf", kind: "contents", created_at: iso(1), created_by: ME }
   ],
   item_notes: [{ id: "n1", item_id: "i-12", author: AYMAN, body: "front page only please", created_at: iso(1) }],
   watch_items: [{ id: "w1", description: "New debit card", details: null, status: "watching", created_at: iso(4), created_by: AYMAN }],
@@ -55,6 +59,11 @@ function query(table) {
     limit: () => b,
     eq: (col, v) => { rows = rows.filter((r) => r[col] === v); return b; },
     in: (col, vs) => { rows = rows.filter((r) => vs.includes(r[col])); return b; },
+    insert: (row) => {
+      (DB[table] ||= []).push({ id: "new-" + Math.random().toString(16).slice(2), created_at: new Date().toISOString(), ...row });
+      window.__rpc?.push("insert into " + table + " " + JSON.stringify(row));
+      return Promise.resolve({ data: null, error: null });
+    },
     single: () => Promise.resolve({ data: rows[0] || null, error: null }),
     maybeSingle: () => Promise.resolve({ data: rows[0] || null, error: null }),
     then: (res) => res({ data: rows, error: null })

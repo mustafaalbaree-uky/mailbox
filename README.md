@@ -35,7 +35,23 @@ drops out of the row on its own.
 
 Opening an envelope stages its photos on the card rather than sending the first
 one straight over. A letter is two pages and a statement is four, so the shots
-pile up with thumbnails and a running count and go over as one batch.
+pile up with thumbnails and a running count and go over as one batch. A scan can
+be a pdf straight out of the scanner app: it skips the resizer, stages as a
+named tile instead of a thumbnail, and shows up on the card as a row with Open
+and Save rather than being forced into an `<img>`.
+
+Two ways out of an open request, because both used to be dead ends:
+
+- **It is junk.** He asked to see inside, it is an advert. Photographing it to
+  get rid of it wastes both their time, so it can be thrown away from the card,
+  with a line saying what it was that goes across as a note.
+- **Take it back.** Sending the contents used to be a one way door — a blurry
+  page sat with the owner with no way to redo it. From the courier's Mailbox
+  tab, "Take it back" pulls the item out of his hands, deletes those photos from
+  the bucket, and puts it back on the To do list with the original request
+  restored. It does not email him his own instruction back: a real decision
+  moves `decided_at` and an undo does not, which is what the notify trigger
+  keys on.
 
 Mail can be deleted from the courier's Mailbox tab, and watch entries from
 either side. Deleting asks first, is permanent, and takes the image files out of
