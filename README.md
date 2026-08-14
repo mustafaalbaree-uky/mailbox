@@ -37,8 +37,20 @@ Opening an envelope stages its photos on the card rather than sending the first
 one straight over. A letter is two pages and a statement is four, so the shots
 pile up with thumbnails and a running count and go over as one batch. A scan can
 be a pdf straight out of the scanner app: it skips the resizer, stages as a
-named tile instead of a thumbnail, and shows up on the card as a row with Open
+named tile instead of a thumbnail, and shows up on the card as a row with Read
 and Save rather than being forced into an `<img>`.
+
+Read opens the pdf inside the app, next to the photos, instead of throwing the
+owner out into another app. iOS renders a pdf in an iframe as a single
+unscrollable first page, so the pages are drawn to canvases with pdf.js, which
+is fetched from the CDN the first time somebody actually opens one and never
+otherwise. It reads like the photo viewer: tap to zoom to the spot you tapped,
+tap again to come back, and the pages redraw at the new size so a zoomed page is
+sharp rather than a stretched bitmap. A staged pdf can be tapped the same way
+before it is sent, in case the scanner app handed back the wrong file. pdf.js 4
+needs `Promise.withResolvers`, which iOS only shipped in 17.4, so there is a
+four line polyfill in front of the import — without it an older phone reads as
+"this scan is broken".
 
 Two ways out of an open request, because both used to be dead ends:
 

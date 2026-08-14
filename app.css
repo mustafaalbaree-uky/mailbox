@@ -242,6 +242,22 @@ textarea { min-height: 84px; resize: vertical; }
 /* Sizes while zoomed are set inline in pixels, measured from the fitted size. */
 .zoomer.zoomed { overflow: auto; }
 
+/* A pdf is a column of pages that always scrolls, unlike a photo which fits the
+   screen until it is zoomed. */
+.zoomer.pdf {
+  display: block; overflow: auto;
+  padding: calc(var(--safe-top) + 64px) 0 calc(var(--safe-bottom) + 84px);
+  text-align: center;
+}
+.pdf-page {
+  display: block; margin: 0 auto 10px;
+  background: #fff; border-radius: 2px;
+}
+.pdf-status {
+  color: #fff; opacity: .8; font-size: 15px;
+  padding: 24px; text-align: center;
+}
+
 /* Sits above the pan surface and never moves with it. Explicit flex centring
    and zero padding, since the global button padding pushes the glyph off
    centre inside a fixed size circle. */

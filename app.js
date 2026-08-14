@@ -271,14 +271,19 @@ function docStrip(item, kind) {
       el("span", { class: "doc-name", text: name + ".pdf" })
     ]);
 
-    const open = el("a", { class: "doc-btn", text: "Open", target: "_blank", rel: "noopener" });
+    // Read here, in the app, the same as a photo. Save is the way out to the
+    // phone's own files for anything he wants to keep.
+    row.append(el("button", {
+      class: "doc-btn",
+      text: "Read",
+      onclick: () => pdfViewer({ path: d.path, name: name + ".pdf" })
+    }));
+
     const save = el("a", { class: "doc-btn", text: "Save", target: "_blank", rel: "noopener" });
-    row.append(open);
     row.append(save);
 
     signPaths([d.path]).then(([url]) => {
       if (!url) return;
-      open.href = url;
       // Supabase honours this on a signed url and sends it down as a file.
       save.href = url + (url.includes("?") ? "&" : "?") + "download=" + encodeURIComponent(name + ".pdf");
     });
@@ -481,6 +486,138 @@ async function lightbox(paths, index) {
   }
 
   show();
+}
+
+/* ----------------------------------------------------------- pdf viewer */
+
+// A scan that came over as a pdf gets read here rather than in another app.
+// iOS renders a pdf in an iframe as a single unscrollable first page, so the
+// pages are drawn to canvases instead. pdf.js is fetched the first time someone
+// actually opens one, so nobody pays for it otherwise.
+const PDF_VERSION = "4.7.76";
+const PDF_MAIN = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDF_VERSION}/build/pdf.min.mjs`;
+const PDF_WORKER = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDF_VERSION}/build/pdf.worker.min.mjs`;
+
+let pdfjs = null;
+async function pdfLib() {
+  if (!pdfjs) {
+    // pdf.js 4 leans on Promise.withResolvers, which iOS only grew in 17.4. On
+    // an older phone the import itself throws, which would read as "the scan is
+    // broken" rather than "this phone is a year behind". Four lines is cheaper
+    // than pinning an older pdf.js forever.
+    if (!Promise.withResolvers) {
+      Promise.withResolvers = function () {
+        let resolve, reject;
+        const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+        return { promise, resolve, reject };
+      };
+    }
+    const lib = await import(PDF_MAIN);
+    lib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
+    pdfjs = lib;
+  }
+  return pdfjs;
+}
+
+// Takes either a path in the bucket or a local blob url, so a scan can also be
+// checked over before it is sent rather than only after it lands.
+async function pdfViewer({ path, url, name }) {
+  const box = document.getElementById("lightbox");
+  clear(box);
+  box.hidden = false;
+
+  const pane = el("div", { class: "zoomer pdf" });
+  const status = el("div", { class: "pdf-status", text: "Opening " + (name || "the scan") + "…" });
+  const label = el("span", { class: "lb-count" });
+
+  pane.append(status);
+  box.append(pane);
+  box.append(el("button", { class: "close", text: "✕", onclick: () => { box.hidden = true; } }));
+  box.append(el("div", { class: "lb-nav" }, [label]));
+
+  // Closing the viewer must stop a half finished render from drawing into a
+  // pane that is no longer on screen.
+  const alive = () => !box.hidden && box.contains(pane);
+
+  let doc = null;
+  let zoomed = false;
+  let dragged = false;
+
+  const draw = async (zoom) => {
+    const fit = Math.min(window.innerWidth, 900);
+    const cssWidth = Math.round(fit * zoom);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    clear(pane);
+    pane.classList.toggle("zoomed", zoom > 1);
+
+    for (let n = 1; n <= doc.numPages; n++) {
+      if (!alive()) return;
+      const page = await doc.getPage(n);
+      const base = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: (cssWidth / base.width) * dpr });
+
+      const canvas = el("canvas", { class: "pdf-page" });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = cssWidth + "px";
+      canvas.style.height = Math.round(viewport.height / dpr) + "px";
+      pane.append(canvas);
+
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    }
+  };
+
+  // The same gesture as a photo: tap to zoom in on the spot you tapped, tap
+  // again to come back. A drag is a pan, not a tap.
+  pane.addEventListener("touchstart", (e) => {
+    dragged = false;
+    pane._sx = e.touches[0].clientX;
+    pane._sy = e.touches[0].clientY;
+  }, { passive: true });
+  pane.addEventListener("touchmove", (e) => {
+    if (Math.abs(e.touches[0].clientX - pane._sx) > 8 ||
+        Math.abs(e.touches[0].clientY - pane._sy) > 8) dragged = true;
+  }, { passive: true });
+
+  pane.addEventListener("click", async (ev) => {
+    if (dragged || !doc) return;
+    const wasAt = pane.scrollHeight ? (pane.scrollTop + pane.clientHeight / 2) / pane.scrollHeight : 0;
+    const relX = ev.clientX / window.innerWidth;
+
+    zoomed = !zoomed;
+    await draw(zoomed ? ZOOM_STEP : 1);
+    if (!alive()) return;
+
+    // Keep roughly the same place on the page across the redraw.
+    pane.scrollTop = Math.max(0, wasAt * pane.scrollHeight - pane.clientHeight / 2);
+    pane.scrollLeft = zoomed
+      ? Math.max(0, Math.min(pane.scrollWidth - pane.clientWidth, relX * pane.scrollWidth - pane.clientWidth / 2))
+      : 0;
+  });
+
+  try {
+    const href = url || (await signPaths([path]))[0];
+    if (!href) throw new Error("that file could not be reached");
+
+    // Handed over as bytes rather than a url: one plain GET, no range requests
+    // against a signed url, and the whole thing is a scan of a few pages.
+    const res = await fetch(href);
+    if (!res.ok) throw new Error("that file could not be reached");
+    const data = await res.arrayBuffer();
+    if (!alive()) return;
+
+    const lib = await pdfLib();
+    doc = await lib.getDocument({ data }).promise;
+    if (!alive()) return;
+
+    label.textContent = doc.numPages === 1 ? "1 page" : `${doc.numPages} pages`;
+    await draw(1);
+  } catch (err) {
+    console.error(err);
+    clear(pane);
+    pane.append(el("div", { class: "pdf-status", text: "Could not open that scan. Try Save instead." }));
+  }
 }
 
 /* ------------------------------------------------------------ bottom sheet */
@@ -1181,7 +1318,12 @@ function courierTodoView() {
           S.opening.shots.forEach((shot, n) => {
             // A pdf has no thumbnail to show, so it gets a tile with its name.
             const face = shot.pdf
-              ? el("div", { class: "doc-tile" }, [
+              ? el("div", {
+                  class: "doc-tile",
+                  // Tap it to read it before it goes over, in case the scanner
+                  // app handed back the wrong file.
+                  onclick: () => pdfViewer({ url: shot.url, name: shot.name })
+                }, [
                   el("span", { class: "doc-icon", text: "📄" }),
                   el("span", { class: "doc-name", text: shot.name || "Scan.pdf" })
                 ])

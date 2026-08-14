@@ -147,6 +147,13 @@ const pdfCard = [...view().querySelectorAll(".card")].find((c) => c.querySelecto
 console.log("doc row:", pdfCard.querySelector(".doc-name").textContent,
   "| links:", [...pdfCard.querySelectorAll(".doc-btn")].map((a) => a.textContent + "=" + (a.href || "").slice(0, 60)).join(" , "));
 console.log("images rendered for the pdf:", pdfCard.querySelectorAll(".docs img").length);
+const readBtn = [...pdfCard.querySelectorAll(".doc-btn")].find((b) => b.textContent.trim() === "Read");
+console.log("Read is a real button:", readBtn.tagName);
+readBtn.click();
+await settle(); await settle();
+const lb = window.document.getElementById("lightbox");
+console.log("viewer opened:", !lb.hidden, "| pane:", !!lb.querySelector(".zoomer.pdf"), "| says:", lb.querySelector(".pdf-status")?.textContent);
+lb.querySelector(".close").click();
 [...pdfCard.querySelectorAll("button")].find((b) => b.textContent.includes("Take it back")).click();
 await settle();
 [...window.document.getElementById("sheet").querySelectorAll("button")].find((b) => b.textContent.trim() === "Take it back").click();
