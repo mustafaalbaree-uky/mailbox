@@ -38,7 +38,7 @@ const CACHE_FILE = "mailbox-widget-cache.json";
 // The five things the owner can ask for, said from each side's point of view.
 const DECISION = {
   forward:    { courier: "Mail it to Ayman",     owner: "Sending it to you",     glyph: "✈️" },
-  hold:       { courier: "Put it in his box",    owner: "Holding on to it",      glyph: "📦" },
+  hold:       { courier: "Hold on to it",        owner: "Holding on to it",      glyph: "📦" },
   discard:    { courier: "Throw it away",        owner: "Throwing it away",      glyph: "🗑️" },
   open_photo: { courier: "Open and photograph",  owner: "Opening for a photo",   glyph: "📷" },
   open_scan:  { courier: "Open and scan",        owner: "Opening for a scan",    glyph: "🖨️" }
@@ -80,31 +80,43 @@ const countdownWords = (n) => {
 
 /* ---------------------------------------------------------------- supabase */
 
-async function post(path, body, token) {
-  const req = new Request(`${SUPABASE_URL}${path}`);
-  req.method = "POST";
+// Everything is read as text and parsed here rather than through loadJSON.
+// loadJSON goes through JSONSerialization, which rejects a bare top level value,
+// so an rpc that answers `"courier"` — a perfectly good JSON string — comes back
+// as "the data couldn't be read because it isn't in the correct format". Parsing
+// in JavaScript accepts it, and a body that really is not JSON can then say what
+// it actually was instead of hiding behind that same message.
+async function send(url, { method, body, token } = {}) {
+  const req = new Request(url);
+  req.method = method || "GET";
   req.headers = {
     "Content-Type": "application/json",
     apikey: SUPABASE_ANON_KEY,
     Authorization: `Bearer ${token || SUPABASE_ANON_KEY}`
   };
-  req.body = JSON.stringify(body);
-  const out = await req.loadJSON();
-  if (req.response.statusCode >= 400) {
-    throw new Error(out.error_description || out.msg || out.message || `HTTP ${req.response.statusCode}`);
+  if (body !== undefined) req.body = JSON.stringify(body);
+
+  const text = await req.loadString();
+  const status = req.response.statusCode;
+
+  let data = null;
+  if (text && text.trim()) {
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      throw new Error(`HTTP ${status}: ${text.trim().slice(0, 80)}`);
+    }
   }
-  return out;
+
+  if (status >= 400) {
+    const why = data && (data.error_description || data.msg || data.message || data.error);
+    throw new Error(why || `HTTP ${status}`);
+  }
+  return data;
 }
 
-async function get(path, token) {
-  const req = new Request(`${SUPABASE_URL}/rest/v1/${path}`);
-  req.headers = { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` };
-  const out = await req.loadJSON();
-  if (req.response.statusCode >= 400) {
-    throw new Error(out.message || `HTTP ${req.response.statusCode}`);
-  }
-  return out;
-}
+const post = (path, body, token) => send(`${SUPABASE_URL}${path}`, { method: "POST", body, token });
+const get = (path, token) => send(`${SUPABASE_URL}/rest/v1/${path}`, { token });
 
 function storedPassword() {
   // Typed into the script once, then it lives in the keychain instead.
@@ -171,7 +183,12 @@ async function fetchState() {
     get("watch_items?select=id&status=eq.watching", t)
   ]);
 
-  const role = typeof roleRows === "string" ? roleRows : (roleRows && roleRows.role) || "courier";
+  // my_role() answers with a bare string, or null if this login was never
+  // linked to a role by create_users.sql.
+  const role = typeof roleRows === "string" ? roleRows : roleRows && roleRows.role;
+  if (role !== "courier" && role !== "owner") {
+    throw new Error(`${USERNAME} is signed in but has no role. Run create_users.sql.`);
+  }
   const mine =
     role === "courier"
       ? items.filter((i) => i.status === "action_needed")
@@ -212,17 +229,34 @@ function writeCache(state) {
 
 /* ------------------------------------------------------------------ layout */
 
-// What each row says, from the point of view of whoever is looking.
-function rowFor(item, role) {
-  const name = "#" + item.seq + (item.label ? " " + item.label : "");
-  if (role === "courier") {
-    const d = DECISION[item.decision];
-    return { glyph: d ? d.glyph : "✉️", name, what: d ? d.courier : "Waiting on you", note: item.note };
+// Everything that is in your court, in one list, said from your side. The
+// courier's pending visit request goes first: it is the only row with a date on
+// it, so it is the one that goes stale if it waits behind five envelopes.
+function courtRows(state) {
+  const rows = [];
+
+  if (state.role === "courier" && state.request) {
+    rows.push({
+      glyph: "📅",
+      name: "Earlier run?",
+      what: longDay(state.request.requested_date),
+      note: state.request.reason
+    });
   }
-  if (item.status === "awaiting_review") {
-    return { glyph: "📄", name, what: "Opened — your call", note: null };
+
+  for (const item of state.items) {
+    const name = "#" + item.seq + (item.label ? " " + item.label : "");
+    if (state.role === "courier") {
+      const d = DECISION[item.decision];
+      rows.push({ glyph: d ? d.glyph : "✉️", name, what: d ? d.courier : "Waiting on you", note: item.note });
+    } else if (item.status === "awaiting_review") {
+      rows.push({ glyph: "📄", name, what: "Opened — your call", note: null });
+    } else {
+      rows.push({ glyph: "✉️", name, what: "New — needs your call", note: null });
+    }
   }
-  return { glyph: "✉️", name, what: "New — needs your call", note: null };
+
+  return rows;
 }
 
 function addRow(stack, row, wide) {
@@ -255,6 +289,7 @@ function buildWidget(state, size, stale) {
 
   const small = size === "small";
   const rowCap = size === "large" ? 9 : size === "medium" ? 4 : 0;
+  const court = courtRows(state);
 
   /* header: the countdown, which is the thing worth seeing at a glance */
   const days = state.next_visit_date == null ? null : daysUntil(state.next_visit_date);
@@ -272,9 +307,9 @@ function buildWidget(state, size, stale) {
 
   if (!small) {
     head.addSpacer();
-    const badge = head.addText(String(state.items.length));
+    const badge = head.addText(String(court.length));
     badge.font = Font.boldSystemFont(15);
-    badge.textColor = state.items.length ? ACCENT : QUIET;
+    badge.textColor = court.length ? ACCENT : QUIET;
   }
 
   const sub = w.addText(
@@ -288,12 +323,10 @@ function buildWidget(state, size, stale) {
 
   if (small) {
     w.addSpacer();
-    const n = w.addText(String(state.items.length));
+    const n = w.addText(String(court.length));
     n.font = Font.boldSystemFont(38);
-    n.textColor = state.items.length ? ACCENT : QUIET;
-    const cap = w.addText(
-      state.items.length === 1 ? "thing on you" : "things on you"
-    );
+    n.textColor = court.length ? ACCENT : QUIET;
+    const cap = w.addText(court.length === 1 ? "thing on you" : "things on you");
     cap.font = Font.systemFont(12);
     cap.textColor = QUIET;
     w.addSpacer();
@@ -312,30 +345,17 @@ function buildWidget(state, size, stale) {
   rows.layoutVertically();
   rows.spacing = 6;
 
-  const pieces = state.items.slice(0, rowCap);
+  const shown = court.slice(0, rowCap);
   const wide = size === "large";
 
-  if (state.role === "courier" && state.request && pieces.length < rowCap) {
-    addRow(
-      rows,
-      {
-        glyph: "📅",
-        name: "Earlier run?",
-        what: longDay(state.request.requested_date),
-        note: state.request.reason
-      },
-      wide
-    );
-  }
-
-  if (!pieces.length) {
+  if (!shown.length) {
     const clear = rows.addText(
       state.role === "courier" ? "Nothing to go do. Clear." : "Nothing waiting on you. Clear."
     );
     clear.font = Font.systemFont(13);
     clear.textColor = QUIET;
   } else {
-    pieces.forEach((i) => addRow(rows, rowFor(i, state.role), wide));
+    shown.forEach((row) => addRow(rows, row, wide));
   }
 
   w.addSpacer();
@@ -344,7 +364,7 @@ function buildWidget(state, size, stale) {
   const foot = w.addStack();
   foot.centerAlignContent();
 
-  const hidden = state.items.length - pieces.length;
+  const hidden = court.length - shown.length;
   const bits = [];
   if (hidden > 0) bits.push(`+${hidden} more`);
   if (state.role === "courier" && state.watching) bits.push(`watching for ${state.watching}`);

@@ -87,6 +87,21 @@ Copy it into Scriptable (or drop it in the Scriptable iCloud folder as
 add it to the home screen. Small shows the count alone, medium four rows, large
 nine.
 
+`tools/scriptable/harness.mjs` runs the widget under node against canned answers
+with the Scriptable API stubbed, and prints the rows it would draw:
+
+```sh
+node tools/scriptable/harness.mjs tools/scriptable/mailbox-widget.js
+FAMILY=large ROLE=owner node tools/scriptable/harness.mjs tools/scriptable/mailbox-widget.js
+```
+
+One thing to know before touching the network code: Scriptable's
+`Request.loadJSON` goes through `JSONSerialization`, which rejects a bare top
+level value, and `my_role()` answers with exactly that — the string `"courier"`.
+That is why the widget reads every response with `loadString` and parses it
+itself. Going back to `loadJSON` brings back "the data couldn't be read because
+it isn't in the correct format".
+
 ## Security shape
 
 - Two accounts, email and password. Public sign up is turned off, so those two

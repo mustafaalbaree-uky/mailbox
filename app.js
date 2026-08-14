@@ -96,7 +96,7 @@ const shortWhen = (ts) => new Date(ts).toLocaleDateString(undefined, { month: "s
 
 const DECISION = {
   forward:    { owner: "Send it to me",              courier: "Mail it to Ayman",            glyph: "✈️" },
-  hold:       { owner: "Hold on to it",              courier: "Put it in Ayman's box",         glyph: "📦" },
+  hold:       { owner: "Hold on to it",              courier: "Hold on to it for him",     glyph: "📦" },
   discard:    { owner: "Throw it away",              courier: "Throw it away",             glyph: "🗑️" },
   open_photo: { owner: "Open it, send me a photo",   courier: "Open it and photograph it", glyph: "📷" },
   open_scan:  { owner: "Open it, send me a scan",    courier: "Open it and scan it",       glyph: "🖨️" }
