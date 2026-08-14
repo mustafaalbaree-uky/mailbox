@@ -149,6 +149,24 @@ button[disabled] { opacity: .45; }
 .row { display: flex; gap: 8px; }
 .row > * { flex: 1; }
 
+/* The To do filter. One line that scrolls sideways rather than a block of
+   wrapped buttons that pushes the mail itself off the screen. */
+.chips {
+  display: flex; gap: 8px; overflow-x: auto;
+  margin: -4px 0; padding: 4px 0;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.chips::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 999px;
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+  background: transparent;
+}
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chip-n { font-variant-numeric: tabular-nums; opacity: .6; font-weight: 700; }
+
 /* -------------------------------------------------------------- inputs */
 
 label.field { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }

@@ -25,7 +25,10 @@ const S = {
   schedule: null,
   requests: [],
   notify: null,
-  staged: []           // photos picked but not yet filed
+  staged: [],          // photos picked but not yet filed
+  opening: null,       // { id, shots } while photographing what was inside one envelope
+  stamp: "",           // fingerprint of the last load, so the poll can tell nothing moved
+  todoFilter: null     // which decision the To do list is narrowed to, null for all
 };
 
 const $boot = document.getElementById("boot");
@@ -95,12 +98,16 @@ const longDay = (s) => parseDay(s).toLocaleDateString(undefined, { weekday: "lon
 const shortWhen = (ts) => new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 const DECISION = {
-  forward:    { owner: "Send it to me",              courier: "Mail it to Ayman",            glyph: "✈️" },
-  hold:       { owner: "Hold on to it",              courier: "Hold on to it for him",     glyph: "📦" },
-  discard:    { owner: "Throw it away",              courier: "Throw it away",             glyph: "🗑️" },
-  open_photo: { owner: "Open it, send me a photo",   courier: "Open it and photograph it", glyph: "📷" },
-  open_scan:  { owner: "Open it, send me a scan",    courier: "Open it and scan it",       glyph: "🖨️" }
+  forward:    { owner: "Send it to me",              courier: "Mail it to Ayman",          glyph: "✈️", short: "Mail out" },
+  hold:       { owner: "Hold on to it",              courier: "Hold on to it for him",     glyph: "📦", short: "Hold" },
+  discard:    { owner: "Throw it away",              courier: "Throw it away",             glyph: "🗑️", short: "Throw away" },
+  open_photo: { owner: "Open it, send me a photo",   courier: "Open it and photograph it", glyph: "📷", short: "Photograph" },
+  open_scan:  { owner: "Open it, send me a scan",    courier: "Open it and scan it",       glyph: "🖨️", short: "Scan" }
 };
+
+// Hardest first, the same order the courier's digest email uses, so the filter
+// row and the email agree about what to knock out first.
+const DECISION_ORDER = ["forward", "open_scan", "open_photo", "hold", "discard"];
 const DISPOSITION = { forwarded: "Mailed out", held: "Held here", discarded: "Thrown away" };
 
 // What the owner sees on an item he has already ruled on, so the pill says both
@@ -134,6 +141,14 @@ async function signPaths(paths) {
   return paths.map((p) => urlCache.get(p)?.url);
 }
 
+// The url a photo already has, if it is still good for a while. Rebuilding a
+// card must not hand back an <img> with no src and fill it in a tick later: on
+// screen that is every photo blinking out and popping back.
+function cachedUrl(path) {
+  const hit = urlCache.get(path);
+  return hit && hit.until - Date.now() > 300000 ? hit.url : null;
+}
+
 /* ------------------------------------------------------------------- data */
 
 async function loadAll() {
@@ -146,6 +161,11 @@ async function loadAll() {
     sb.from("notify_config").select("*").eq("id", 1).single()
   ]);
   for (const r of [items, watch, schedule, requests, people, notify]) if (r.error) throw r.error;
+
+  // Everything that was just read, as one string. The background poll compares
+  // it with the last one and leaves the page alone when the answer is the same,
+  // which it almost always is.
+  let stamp = JSON.stringify([items.data, watch.data, schedule.data, requests.data, notify.data]);
 
   S.items = items.data;
   S.watch = watch.data;
@@ -164,6 +184,7 @@ async function loadAll() {
     ]);
     if (photos.error) throw photos.error;
     if (notes.error) throw notes.error;
+    stamp += JSON.stringify([photos.data, notes.data]);
     for (const p of photos.data) {
       if (!S.photos.has(p.item_id)) S.photos.set(p.item_id, []);
       S.photos.get(p.item_id).push(p);
@@ -173,6 +194,10 @@ async function loadAll() {
       S.notes.get(n.item_id).push(n);
     }
   }
+
+  const changed = stamp !== S.stamp;
+  S.stamp = stamp;
+  return changed;
 }
 
 async function refresh(quiet = true) {
@@ -182,6 +207,26 @@ async function refresh(quiet = true) {
   } catch (err) {
     console.error(err);
     if (!quiet) toast(err.message || "Could not load", true);
+  }
+}
+
+// The background check, which is a different thing from a refresh you asked for.
+// Nobody wants the page rebuilt under their thumb every forty five seconds, so
+// this only redraws when something actually moved, holds off entirely while a
+// sheet or a photo is open, and puts the scroll position back afterwards.
+async function pollRefresh() {
+  if (document.hidden || !S.profile) return;
+  if (!document.getElementById("sheet").hidden) return;
+  if (!document.getElementById("lightbox").hidden) return;
+  if (S.staged.length || S.opening) return;
+
+  try {
+    if (!(await loadAll())) return;
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+  } catch (err) {
+    console.error(err);
   }
 }
 
@@ -216,10 +261,15 @@ function photoStrip(item, kind) {
   if (!shots.length) return null;
   const strip = el("div", { class: "shots" + (shots.length === 1 ? " one" : "") });
   shots.forEach((p) => {
-    const img = el("img", { alt: kind === "contents" ? "Contents" : "Envelope", loading: "lazy" });
+    const known = cachedUrl(p.path);
+    const img = el("img", {
+      alt: kind === "contents" ? "Contents" : "Envelope",
+      loading: "lazy",
+      src: known || null
+    });
     img.addEventListener("click", () => lightbox(shots.map((x) => x.path), shots.indexOf(p)));
     strip.append(img);
-    signPaths([p.path]).then(([url]) => { if (url) img.src = url; });
+    if (!known) signPaths([p.path]).then(([url]) => { if (url) img.src = url; });
   });
   return strip;
 }
@@ -511,18 +561,58 @@ async function completeItem(item) {
   if (ok) { toast("Marked done"); await refresh(); }
 }
 
-async function addContents(item) {
-  const files = await pickFiles({ camera: false });
-  if (!files.length) return;
+// Opening an envelope is rarely one photo: a letter runs to two pages and a
+// statement to four. So the shots pile up on the card first and go over as a
+// batch when you say so, the same way filing new mail works.
+function startOpening(item) {
+  S.opening = { id: item.id, shots: [] };
+  addShots(item);
+}
+
+async function addShots(item) {
+  // A scan comes out of the scanner app and lands in the photo library; a photo
+  // is taken here and now.
+  const camera = item.decision === "open_photo";
+  const files = await pickFiles({ camera });
+
+  if (!files.length) {
+    if (!S.opening?.shots.length) S.opening = null;
+    render();
+    return;
+  }
+
+  await guard("Preparing photos", async () => {
+    for (const f of files) {
+      const blob = await compress(f, 2200, 0.86);
+      S.opening.shots.push({ blob, url: URL.createObjectURL(blob) });
+    }
+  });
+  render();
+}
+
+function dropOpening() {
+  S.opening?.shots.forEach((s) => URL.revokeObjectURL(s.url));
+  S.opening = null;
+  render();
+}
+
+async function sendOpening(item) {
+  const shots = S.opening?.shots || [];
+  if (!shots.length) return;
+
   const ok = await guard("Uploading", async () => {
-    const blobs = [];
-    for (const f of files) blobs.push(await compress(f, 2200, 0.86));
-    const paths = await uploadBlobs(blobs, (n, total) => busy(`Uploading ${n} of ${total}`));
+    const paths = await uploadBlobs(shots.map((s) => s.blob), (n, total) => busy(`Uploading ${n} of ${total}`));
     const { error } = await sb.rpc("mark_opened", { p_item: item.id, p_paths: paths });
     if (error) throw error;
     return true;
   });
-  if (ok) { toast("Sent to Ayman for a look"); await refresh(); }
+
+  if (ok) {
+    shots.forEach((s) => URL.revokeObjectURL(s.url));
+    S.opening = null;
+    toast(shots.length === 1 ? "Sent to Ayman for a look" : `${shots.length} photos sent to Ayman`);
+    await refresh();
+  }
 }
 
 async function fileStaged({ separate, label, note }) {
@@ -922,17 +1012,90 @@ function courierTodoView() {
   frag.append(el("button", { class: "btn-quiet btn-center", text: "✉️  Email notifications", onclick: notifySettings }));
 
   const todo = S.items.filter(needsCourier);
+
+  // One errand at a time: on the way to the post box you only want the ones
+  // going in it. A kind with nothing left in it drops out of the row, and if it
+  // was the one being shown the list falls back to everything rather than
+  // leaving you staring at a filtered blank.
+  const kinds = DECISION_ORDER.filter((k) => todo.some((i) => i.decision === k));
+  if (S.todoFilter && !kinds.includes(S.todoFilter)) S.todoFilter = null;
+  const shown = S.todoFilter ? todo.filter((i) => i.decision === S.todoFilter) : todo;
+
   frag.append(el("div", { class: "section-title", text: todo.length ? "To do" : "Nothing to do" }));
   if (!todo.length) frag.append(el("div", { class: "empty", text: "No requests from Ayman right now." }));
 
-  for (const item of todo) {
+  if (kinds.length > 1) {
+    const chips = el("div", { class: "chips" });
+    const chip = (key, label, count) => {
+      const b = el("button", {
+        class: "chip" + (S.todoFilter === key ? " on" : ""),
+        onclick: () => { S.todoFilter = key; render(); }
+      });
+      b.append(document.createTextNode(label));
+      b.append(el("span", { class: "chip-n", text: String(count) }));
+      return b;
+    };
+    chips.append(chip(null, "All", todo.length));
+    for (const k of kinds) {
+      chips.append(chip(k, DECISION[k].glyph + " " + DECISION[k].short,
+        todo.filter((i) => i.decision === k).length));
+    }
+    frag.append(chips);
+  }
+
+  // Photos staged against an item that has moved on have nowhere to go.
+  if (S.opening && !todo.some((i) => i.id === S.opening.id)) {
+    S.opening.shots.forEach((s) => URL.revokeObjectURL(s.url));
+    S.opening = null;
+  }
+
+  for (const item of shown) {
     const box = el("div", { class: "choices" });
     if (item.decision === "open_photo" || item.decision === "open_scan") {
-      box.append(el("button", {
-        class: "btn-main btn-center",
-        text: item.decision === "open_scan" ? "Attach the scan" : "Attach photos of the contents",
-        onclick: () => addContents(item)
-      }));
+      const staging = S.opening && S.opening.id === item.id;
+      const scan = item.decision === "open_scan";
+
+      if (!staging) {
+        box.append(el("button", {
+          class: "btn-main btn-center",
+          text: scan ? "Attach the scan" : "Photograph the contents",
+          onclick: () => startOpening(item)
+        }));
+      } else {
+        if (S.opening.shots.length) {
+          const strip = el("div", { class: "staged" });
+          S.opening.shots.forEach((shot, n) => {
+            strip.append(el("figure", {}, [
+              el("img", { src: shot.url, alt: "Photo of the contents" }),
+              el("button", {
+                text: "✕",
+                onclick: () => { URL.revokeObjectURL(shot.url); S.opening.shots.splice(n, 1); render(); }
+              })
+            ]));
+          });
+          box.append(strip);
+        }
+
+        box.append(el("button", {
+          class: "btn-quiet btn-center",
+          text: S.opening.shots.length
+            ? (scan ? "Add another page" : "Take another photo")
+            : (scan ? "Choose the scan" : "Take a photo"),
+          onclick: () => addShots(item)
+        }));
+
+        if (S.opening.shots.length) {
+          box.append(el("button", {
+            class: "btn-main btn-center",
+            text: S.opening.shots.length === 1
+              ? "Send it to Ayman"
+              : `Send all ${S.opening.shots.length} to Ayman`,
+            onclick: () => sendOpening(item)
+          }));
+        }
+
+        box.append(el("button", { class: "btn-quiet btn-center", text: "Cancel", onclick: dropOpening }));
+      }
     } else {
       box.append(el("button", {
         class: "btn-main btn-center",
@@ -1403,10 +1566,8 @@ async function start() {
   await refresh(false);
 }
 
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && S.profile) refresh();
-});
-setInterval(() => { if (!document.hidden && S.profile) refresh(); }, 45000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pollRefresh(); });
+setInterval(pollRefresh, 45000);
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js").catch(() => {});

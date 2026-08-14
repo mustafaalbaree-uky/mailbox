@@ -28,6 +28,15 @@ policy pins it to the `watch/` prefix so it still cannot touch mail photos.
 While an item sits with the courier, the owner's card says what he asked for,
 for example "Mustafa is on it · opening it for a scan".
 
+The To do list has a filter row across the top — All, then one chip per kind of
+job with a count — because an errand is one kind at a time: on the way to the
+post box you only want the ones going in it. A kind with nothing left in it
+drops out of the row on its own.
+
+Opening an envelope stages its photos on the card rather than sending the first
+one straight over. A letter is two pages and a statement is four, so the shots
+pile up with thumbnails and a running count and go over as one batch.
+
 Mail can be deleted from the courier's Mailbox tab, and watch entries from
 either side. Deleting asks first, is permanent, and takes the image files out of
 the bucket rather than orphaning them.
@@ -159,6 +168,29 @@ python3 -m http.server 8000
 
 Then open http://localhost:8000. A service worker needs `localhost` or https, so
 do not open `index.html` as a file.
+
+That still wants a login and real mail. `tools/preview` builds the same app with
+Supabase swapped for a fake full of made up mail, so the interface can be driven
+without either:
+
+```sh
+node tools/preview/build.mjs                  # writes tools/preview/build
+cd tools/preview/build && python3 -m http.server 8000
+
+npm i jsdom && node tools/preview/uitest.mjs  # or drive it headless
+```
+
+`uitest.mjs` taps a filter chip, stages three photos of one envelope, sends
+them, and asserts the background poll leaves the page alone when nothing has
+changed. The build step only redirects the Supabase import and gives the file
+picker and the photo resizer a test door, so what runs is the real interface.
+
+The poll behind that last check is deliberate: every 45 seconds the app reloads
+and compares a fingerprint of everything it read against the last one, and only
+redraws if something actually moved. Redrawing unconditionally meant the page
+rebuilding under your thumb, every photo blinking out and back, and your scroll
+position thrown away, twice a minute. Photos also keep the signed url they
+already have across a redraw instead of starting from an empty `<img>`.
 
 ## Files
 
