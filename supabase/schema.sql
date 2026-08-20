@@ -326,7 +326,7 @@ begin
 end;
 $$;
 
--- The courier went on the run; roll the date forward by one interval.
+-- The courier went on the run; reset the countdown to one interval from today.
 create or replace function public.log_visit()
 returns date language plpgsql security definer set search_path = public as $$
 declare
@@ -334,7 +334,7 @@ declare
 begin
   perform public.require_role('courier');
   update public.schedule set
-    next_visit_date = greatest(current_date, next_visit_date) + interval_days,
+    next_visit_date = current_date + interval_days,
     updated_at      = now(),
     updated_by      = auth.uid()
   where id = 1
