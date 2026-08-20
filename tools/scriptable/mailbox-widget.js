@@ -2,7 +2,7 @@
 // These must be at the very top of the file. Comments below are used by Scriptable.
 // icon-color: deep-blue; icon-glyph: envelope;
 //
-// Mailbox — a home screen widget for https://github.com/mustafaalbaree-uky/mailbox
+// Mailbox, a home screen widget for https://github.com/mustafaalbaree-uky/mailbox
 //
 // Shows the pieces of mail that are waiting on YOU, and how long until the next
 // mail run. It works signed in as either account and asks the database which
@@ -82,7 +82,7 @@ const countdownWords = (n) => {
 
 // Everything is read as text and parsed here rather than through loadJSON.
 // loadJSON goes through JSONSerialization, which rejects a bare top level value,
-// so an rpc that answers `"courier"` — a perfectly good JSON string — comes back
+// so an rpc that answers `"courier"`, a perfectly good JSON string, comes back
 // as "the data couldn't be read because it isn't in the correct format". Parsing
 // in JavaScript accepts it, and a body that really is not JSON can then say what
 // it actually was instead of hiding behind that same message.
@@ -250,9 +250,9 @@ function courtRows(state) {
       const d = DECISION[item.decision];
       rows.push({ glyph: d ? d.glyph : "✉️", name, what: d ? d.courier : "Waiting on you", note: item.note });
     } else if (item.status === "awaiting_review") {
-      rows.push({ glyph: "📄", name, what: "Opened — your call", note: null });
+      rows.push({ glyph: "📄", name, what: "Opened, your call", note: null });
     } else {
-      rows.push({ glyph: "✉️", name, what: "New — needs your call", note: null });
+      rows.push({ glyph: "✉️", name, what: "New, needs your call", note: null });
     }
   }
 
