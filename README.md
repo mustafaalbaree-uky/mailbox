@@ -28,8 +28,8 @@ policy pins it to the `watch/` prefix so it still cannot touch mail photos.
 While an item sits with the courier, the owner's card says what he asked for,
 for example "Mustafa is on it · opening it for a scan".
 
-The To do list has a filter row across the top — All, then one chip per kind of
-job with a count — because an errand is one kind at a time: on the way to the
+The To do list has a filter row across the top. All, then one chip per kind of
+job with a count, because an errand is one kind at a time: on the way to the
 post box you only want the ones going in it. A kind with nothing left in it
 drops out of the row on its own.
 
@@ -49,7 +49,7 @@ tap again to come back, and the pages redraw at the new size so a zoomed page is
 sharp rather than a stretched bitmap. A staged pdf can be tapped the same way
 before it is sent, in case the scanner app handed back the wrong file. pdf.js 4
 needs `Promise.withResolvers`, which iOS only shipped in 17.4, so there is a
-four line polyfill in front of the import — without it an older phone reads as
+four line polyfill in front of the import. Without it an older phone reads as
 "this scan is broken".
 
 Two ways out of an open request, because both used to be dead ends:
@@ -57,7 +57,7 @@ Two ways out of an open request, because both used to be dead ends:
 - **It is junk.** He asked to see inside, it is an advert. Photographing it to
   get rid of it wastes both their time, so it can be thrown away from the card,
   with a line saying what it was that goes across as a note.
-- **Take it back.** Sending the contents used to be a one way door — a blurry
+- **Take it back.** Sending the contents used to be a one way door. A blurry
   page sat with the owner with no way to redo it. From the courier's Mailbox
   tab, "Take it back" pulls the item out of his hands, deletes those photos from
   the bucket, and puts it back on the To do list with the original request
@@ -108,7 +108,7 @@ action rather than a two person handshake.
 
 `tools/scriptable/mailbox-widget.js` is a [Scriptable](https://scriptable.app)
 widget: a glance at what is waiting on you without opening anything. The header
-counts down to the next mail run, and the list is whatever is in your court —
+counts down to the next mail run, and the list is whatever is in your court:
 for the courier the mail he has been told to go do something about, for the
 owner the mail waiting on his call.
 
@@ -134,7 +134,7 @@ FAMILY=large ROLE=owner node tools/scriptable/harness.mjs tools/scriptable/mailb
 
 One thing to know before touching the network code: Scriptable's
 `Request.loadJSON` goes through `JSONSerialization`, which rejects a bare top
-level value, and `my_role()` answers with exactly that — the string `"courier"`.
+level value, and `my_role()` answers with exactly that, the string `"courier"`.
 That is why the widget reads every response with `loadString` and parses it
 itself. Going back to `loadJSON` brings back "the data couldn't be read because
 it isn't in the correct format".
